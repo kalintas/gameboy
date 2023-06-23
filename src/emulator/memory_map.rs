@@ -1,5 +1,3 @@
-
-
 /*
 Memory map of the gameboy(from pandocs: http://bgb.bircd.org/pandocs.htm):
     0000-3FFF   16KB ROM Bank 00     (in cartridge, fixed at bank 00)
@@ -16,9 +14,7 @@ Memory map of the gameboy(from pandocs: http://bgb.bircd.org/pandocs.htm):
     FFFF        Interrupt Enable Register
 */
 
-use std::{path::Path, cell::RefCell, borrow::BorrowMut};
-
-use super::memory_strings::{MemoryString, DisassemblyString};
+use std::path::Path;
 
 pub struct MemoryMap {
     rom_banks: [[u8; 0x4000]; 2], // 16KB rom banks that is 'in the cartridge'.
@@ -28,9 +24,9 @@ pub struct MemoryMap {
     oam: [u8; 0x100],             // Sprite Attribute Table(OAM)
     io_ports: [u8; 0x80],
     high_ram: [u8; 0x7F],
-    ier: u8,                      // Interrupt Enable Register
+    ier: u8, // Interrupt Enable Register
 
-    on_change: Box<dyn Fn(usize, u8)>
+    pub changes: Vec<(usize, u8)>,
 }
 
 impl MemoryMap {
@@ -45,10 +41,9 @@ impl MemoryMap {
             high_ram: [0u8; 0x7F],
             ier: 0u8,
 
-            on_change: Box::new(|_, _| {})
+            changes: Vec::new(),
         }
     }
-
 
     pub fn load_rom<T: AsRef<Path>>(&mut self, path: T) {
         let rom = std::fs::read(path).unwrap();
@@ -57,21 +52,14 @@ impl MemoryMap {
         self.rom_banks[1].copy_from_slice(&rom[0x4000..0x8000]);
 
         for i in 0..rom.len() {
-            
-            (self.on_change)(i, rom[i]);
+            self.changes.push((i, rom[i]));
         }
     }
 
-    pub fn set_on_change<T: Fn(usize, u8) + 'static>(&mut self, on_change: T) {
-        self.on_change = Box::new(on_change)
-    }
-
     pub fn set(&mut self, address: u16, value: u8) {
-        
         let address = address as usize;
 
-        (self.on_change)(address, value);
-
+        self.changes.push((address, value));
 
         if address < 0x8000 {
             // 0000-3FFF   16KB ROM Bank 00
@@ -159,7 +147,6 @@ impl MemoryMap {
     }
 
     pub fn get_u16(&self, address: u16) -> u16 {
-
         let lsb = self.get(address) as u16; // Get the least significant byte
         let msb = self.get(address + 1) as u16; // Get the most significant byte
 

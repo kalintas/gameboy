@@ -1,8 +1,10 @@
-use super::{memory_map::MemoryMap, instructions::{Instruction, INSTRUCTIONS, self}, registers::Registers};
-
+use super::{
+    instructions::{Instruction, INSTRUCTIONS},
+    memory_map::MemoryMap,
+    registers::Registers,
+};
 
 pub struct Cpu {
-
     pub pc: u16,
     pub sp: u16,
     pub clock_cycles: u32,
@@ -11,7 +13,6 @@ pub struct Cpu {
 
 impl Cpu {
     pub fn new() -> Self {
-        
         Self {
             pc: 0x100,
             sp: 0,
@@ -21,7 +22,6 @@ impl Cpu {
     }
 
     pub fn cycle(&mut self, memory_map: &mut MemoryMap) {
-
         let opcode = self.fetch(memory_map);
 
         let instruction = self.decode(opcode);
@@ -30,19 +30,16 @@ impl Cpu {
     }
 
     fn fetch(&self, memory_map: &MemoryMap) -> u8 {
-        
         memory_map.get(self.pc)
     }
 
     fn decode(&self, opcode: u8) -> Instruction {
-        
         INSTRUCTIONS[opcode as usize]
     }
 
     fn execute(&mut self, instruction: Instruction, memory_map: &mut MemoryMap) {
-        
         self.clock_cycles += (instruction.function)(self, memory_map) as u32;
-        
+
         self.pc += instruction.length as u16;
     }
 }
