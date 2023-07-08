@@ -35,7 +35,7 @@ impl DebuggerPanel {
             breakpoints: Vec::new(),
 
             old_toggled_breakpoint: None,
-            toggled_breakpoint: None,
+            toggled_breakpoint: Some(Breakpoint { row: 195, pointer: 0x100 }),
 
             runinng_next_line: false,
         }

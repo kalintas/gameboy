@@ -152,4 +152,14 @@ impl MemoryMap {
 
         (msb << 8) | lsb
     }
+
+    pub fn set_u16(&mut self, address: u16, value: u16) {
+
+        let lsb = (value & 0xFF) as u8; // Get the least significant byte
+        let msb = ((value >> 8) & 0xFF) as u8; // Get the most significant byte
+
+        self.set(address, lsb);
+        self.set(address + 1, msb);
+    }
+
 }

@@ -1,11 +1,12 @@
-mod arithmetic;
-mod bit;
+
+mod misc;
 mod jump;
 mod load;
-mod misc;
+mod arithmetic;
+mod bit;
 
-use crate::emulator::memory_map::MemoryMap;
 use crate::emulator::Cpu;
+use crate::emulator::memory_map::MemoryMap;
 
 #[derive(Clone, Copy)]
 pub struct Instruction {
@@ -16,11 +17,7 @@ pub struct Instruction {
 
 impl Instruction {
     #[allow(dead_code)]
-    pub const fn new(
-        name: &'static str,
-        length: u8,
-        function: fn(&mut Cpu, &mut MemoryMap) -> u8,
-    ) -> Self {
+    pub const fn new(name: &'static str, length: u8, function: fn(&mut Cpu, &mut MemoryMap) -> u8) -> Self {
         Self {
             name,
             length,
@@ -32,7 +29,7 @@ impl Instruction {
 #[allow(dead_code)]
 fn undefined(_cpu: &mut Cpu, _memory_map: &mut MemoryMap) -> u8 {
     4
-}
+} 
 
 const UNDEFINED: Instruction = Instruction::new("UNDEFINED", 1, undefined);
 
@@ -293,6 +290,7 @@ pub const INSTRUCTIONS: [Instruction; 0x100] = [
     UNDEFINED,
     Instruction::new("CP d8", 2, arithmetic::cp_d8),
     Instruction::new("RST 38H", 1, jump::rst_38h),
+
 ];
 
 pub const PREFIX_CB_INSTRUCTIONS: [Instruction; 0x100] = [
@@ -552,4 +550,5 @@ pub const PREFIX_CB_INSTRUCTIONS: [Instruction; 0x100] = [
     Instruction::new("SET 7,L", 2, bit::set_7_l),
     Instruction::new("SET 7,(HL)", 2, bit::set_7_hl_addr),
     Instruction::new("SET 7,A", 2, bit::set_7_a),
+
 ];
