@@ -27,7 +27,7 @@ function processTable(tableId) {
 
             const cellValue = row.cells[j].innerHTML;
 
-            const opcode = (((i - 1) << 4) | (j - 1)).toString(16);
+            const opcode = (((i - 1) << 4) | (j - 1)).toString(16).padStart(2, '0').toUpperCase();
 
             const match = cellValue.match(cellRegex);
 
@@ -64,7 +64,7 @@ function processTable(tableId) {
                     instructionType = "bit";
                 }
 
-                instructionFunctions[instructionType] += instructionFunction(instructionName, lengthInBytes, durationInCycles, flagsAffected, functionName);
+                instructionFunctions[instructionType] += instructionFunction(opcode, instructionName, lengthInBytes, durationInCycles, flagsAffected, functionName);
 
                 instructions += `    Instruction::new("${instructionName}", ${lengthInBytes}, ${instructionType}::${functionName}),\n`;
             } else {
@@ -83,10 +83,37 @@ const instructionsDirPath = path.join(__dirname, "../src/emulator/instructions/"
 
 fs.writeFileSync(path.join(instructionsDirPath, "./mod.rs"), instructionFile(instructions, prefixCBInstructions));
 
+
+// Regex to find and capture function contents.
+const functionContentsRegex = /pub fn (.*)\(.*\{([\s\S]*?)\}(?:(?:[\n\r]*\/\/\/)|[\n\r]*$)/g;
+
 for (const instructionType in instructionFunctions) {
 
     const filePath = path.join(instructionsDirPath, instructionType + ".rs");
-    const file = instructionFunctionFile(instructionFunctions[instructionType]);
+    let file = instructionFunctionFile(instructionFunctions[instructionType]);
+
+    // Dont overwrite everything if these file already exist.
+    try {
+        const oldFile = fs.readFileSync(filePath).toString();
+
+        let matches;
+        let functionContents = [];
+    
+        while (matches = functionContentsRegex.exec(oldFile)) {
+            // First group is the name of the function.
+            // Second group is the content of the function.
+            functionContents.push([matches[1], matches[2]]);
+        }
+    
+        functionContents.forEach(functionContent => {
+    
+            // Create a regex to replace new files contents with the old files contents.
+            const replaceRegex = new RegExp(`(pub fn ${functionContent[0]}\\(.*\{)((?:\n|.)*?)(\}\n)`);
+                
+            file = file.replace(replaceRegex, `$1${functionContent[1]}$3`);
+        });
+
+    } catch (error) {}
 
     fs.writeFileSync(filePath, file);
 }

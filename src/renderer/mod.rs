@@ -1,5 +1,6 @@
 use std::{error::Error, time::Instant};
 
+use imgui::StyleColor;
 use sdl2::{
     event::{Event, WindowEvent},
     keyboard::Keycode,
@@ -60,6 +61,62 @@ impl Renderer {
         let mut imgui = imgui::Context::create();
 
         imgui.set_ini_filename(None);
+
+        // imgui.style_mut().window_padding = [15.0, 15.0];
+        // imgui.style_mut().window_rounding = 0.0;
+        // imgui.style_mut().frame_padding = [5.0, 5.0];
+        // imgui.style_mut().frame_rounding = 4.0;
+        // imgui.style_mut().item_spacing = [12.0, 8.0];
+        // imgui.style_mut().item_inner_spacing = [8.0, 6.0];
+        // imgui.style_mut().indent_spacing = 25.0;
+        // imgui.style_mut().scrollbar_size = 20.0;
+        // imgui.style_mut().scrollbar_rounding = 2.0;
+        // imgui.style_mut().grab_min_size = 5.0;
+        // imgui.style_mut().grab_rounding = 3.0;
+     
+        // imgui.style_mut().colors[StyleColor::Text as usize] = [0.80, 0.80, 0.83, 1.00];
+        // imgui.style_mut().colors[StyleColor::TextDisabled as usize] = [0.24, 0.23, 0.29, 1.00];
+        // imgui.style_mut().colors[StyleColor::WindowBg as usize] = [0.06, 0.05, 0.07, 1.00];
+        // imgui.style_mut().colors[StyleColor::ChildBg as usize] = [0.07, 0.07, 0.09, 1.00];
+        // imgui.style_mut().colors[StyleColor::PopupBg as usize] = [0.07, 0.07, 0.09, 1.00];
+        // imgui.style_mut().colors[StyleColor::Border as usize] = [0.80, 0.80, 0.83, 0.88];
+        // imgui.style_mut().colors[StyleColor::BorderShadow as usize] = [0.92, 0.91, 0.88, 0.00];
+        // imgui.style_mut().colors[StyleColor::FrameBg as usize] = [0.10, 0.09, 0.12, 1.00];
+        // imgui.style_mut().colors[StyleColor::FrameBgHovered as usize] = [0.24, 0.23, 0.29, 1.00];
+        // imgui.style_mut().colors[StyleColor::FrameBgActive as usize] = [0.56, 0.56, 0.58, 1.00];
+        // imgui.style_mut().colors[StyleColor::TitleBg as usize] = [0.10, 0.09, 0.12, 1.00];
+        // imgui.style_mut().colors[StyleColor::TitleBgCollapsed as usize] = [1.00, 0.98, 0.95, 0.75];
+        // imgui.style_mut().colors[StyleColor::TitleBgActive as usize] = [0.07, 0.07, 0.09, 1.00];
+        // imgui.style_mut().colors[StyleColor::MenuBarBg as usize] = [0.10, 0.09, 0.12, 1.00];
+        // imgui.style_mut().colors[StyleColor::ScrollbarBg as usize] = [0.10, 0.09, 0.12, 1.00];
+        // imgui.style_mut().colors[StyleColor::ScrollbarGrab as usize] = [0.80, 0.80, 0.83, 0.31];
+        // imgui.style_mut().colors[StyleColor::ScrollbarGrabHovered as usize] = [0.56, 0.56, 0.58, 1.00];
+        // imgui.style_mut().colors[StyleColor::ScrollbarGrabActive as usize] = [0.06, 0.05, 0.07, 1.00];
+        // // imgui.style_mut().colors[StyleColor::Combo as usize] = [0.19, 0.18, 0.21, 1.00];
+        // imgui.style_mut().colors[StyleColor::CheckMark as usize] = [0.80, 0.80, 0.83, 0.31];
+        // imgui.style_mut().colors[StyleColor::SliderGrab as usize] = [0.80, 0.80, 0.83, 0.31];
+        // imgui.style_mut().colors[StyleColor::SliderGrabActive as usize] = [0.06, 0.05, 0.07, 1.00];
+        // imgui.style_mut().colors[StyleColor::Button as usize] = [0.10, 0.09, 0.12, 1.00];
+        // imgui.style_mut().colors[StyleColor::ButtonHovered as usize] = [0.24, 0.23, 0.29, 1.00];
+        // imgui.style_mut().colors[StyleColor::ButtonActive as usize] = [0.56, 0.56, 0.58, 1.00];
+        // imgui.style_mut().colors[StyleColor::Header as usize] = [0.10, 0.09, 0.12, 1.00];
+        // imgui.style_mut().colors[StyleColor::HeaderHovered as usize] = [0.56, 0.56, 0.58, 1.00];
+        // imgui.style_mut().colors[StyleColor::HeaderActive as usize] = [0.06, 0.05, 0.07, 1.00];
+        // // imgui.style_mut().colors[StyleColor::Column as usize] = [0.56, 0.56, 0.58, 1.00];
+        // // imgui.style_mut().colors[StyleColor::ColumnHovered as usize] = [0.24, 0.23, 0.29, 1.00];
+        // // imgui.style_mut().colors[StyleColor::ColumnActive as usize] = [0.56, 0.56, 0.58, 1.00];
+        // imgui.style_mut().colors[StyleColor::ResizeGrip as usize] = [0.00, 0.00, 0.00, 0.00];
+        // imgui.style_mut().colors[StyleColor::ResizeGripHovered as usize] = [0.56, 0.56, 0.58, 1.00];
+        // imgui.style_mut().colors[StyleColor::ResizeGripActive as usize] = [0.06, 0.05, 0.07, 1.00];
+        // // imgui.style_mut().colors[StyleColor::CloseButton as usize] = [0.40, 0.39, 0.38, 0.16];
+        // // imgui.style_mut().colors[StyleColor::CloseButtonHovered as usize] = [0.40, 0.39, 0.38, 0.39];
+        // // imgui.style_mut().colors[StyleColor::CloseButtonActive as usize] = [0.40, 0.39, 0.38, 1.00];
+        // imgui.style_mut().colors[StyleColor::PlotLines as usize] = [0.40, 0.39, 0.38, 0.63];
+        // imgui.style_mut().colors[StyleColor::PlotLinesHovered as usize] = [0.25, 1.00, 0.00, 1.00];
+        // imgui.style_mut().colors[StyleColor::PlotHistogram as usize] = [0.40, 0.39, 0.38, 0.63];
+        // imgui.style_mut().colors[StyleColor::PlotHistogramHovered as usize] = [0.25, 1.00, 0.00, 1.00];
+        // imgui.style_mut().colors[StyleColor::TextSelectedBg as usize] = [0.25, 1.00, 0.00, 0.43];
+        // // imgui.style_mut().colors[StyleColor::ModalWindowDarkening as usize] = [1.00, 0.98, 0.95, 0.73];
 
         let glow_context = unsafe {
             imgui_glow_renderer::glow::Context::from_loader_function(|s| {

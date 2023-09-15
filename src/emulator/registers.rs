@@ -111,6 +111,10 @@ impl Registers {
     pub fn get_z(&self) -> u8 {
         (self.f >> 7) & 0x1
     }
+
+    pub fn set_flags(&mut self, z: u8, n: u8, h: u8, cy: u8) {
+        self.f = (z << 7) | (n << 6) | (h << 5) | (cy << 4);
+    }
 }
 
 impl Index<usize> for Registers {

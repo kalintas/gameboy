@@ -42,11 +42,15 @@ impl EmulatorRenderer {
         //     self.panels.iter().for_each(|panel| panel.update(emulator, change));
         // });
 
+        self.debugger_panel.pause(emulator);
+
         let framebuffer = Framebuffer::new();
 
         while self.running && !self.renderer.poll_events() {
 
             self.debugger_panel.cycle(emulator);
+
+            // emulator.cycle();
 
             self.panels
                 .iter_mut()
@@ -77,14 +81,14 @@ impl EmulatorRenderer {
             );
 
             let width = self.renderer.window_width as f32;
-            let height = self.renderer.window_height as f32;
+            let height = (self.renderer.window_height - 19) as f32;
 
             self.renderer.render(|ui| {
                 ui.main_menu_bar(|| {
                     ui.menu("File", || {
                         ui.menu_item("Load Cartidage");
                         if ui.menu_item("Reload Cartidage") {
-                            *emulator = Emulator::new();
+                            *emulator = Emulator::after_boot();
                             emulator.load_cartidge("./roms/tetris.gb");
 
                             self.debugger_panel.toggled_breakpoint = None;
@@ -116,16 +120,18 @@ impl EmulatorRenderer {
 
                         if ui.menu_item("Clear All Breakpoints") {
 
-                            self.debugger_panel.breakpoints = Vec::new();
+                            self.debugger_panel.breakpoints.clear();
                         }
 
                     });
+
+                    ui.show_metrics_window(&mut true);
                 });
 
                 self.panels
                     .iter_mut()
                     .for_each(|panel| panel.render(ui, emulator, width, height));
-                self.debugger_panel.render(ui, &emulator, width, height);
+                self.debugger_panel.render(ui, emulator, width, height);
 
                 // ui.show_demo_window(&mut true);
             });

@@ -6,7 +6,7 @@ mod emulator_renderer;
 mod renderer;
 
 fn main() {
-    let mut emulator = emulator::Emulator::new();
+    let mut emulator = emulator::Emulator::after_boot();
 
     emulator.load_cartidge("./roms/tetris.gb");
 

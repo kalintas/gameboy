@@ -54,7 +54,7 @@ impl Panel for MemoryPanel {
         }
     }
 
-    fn render(&mut self, ui: &imgui::Ui, emulator: &Emulator, width: f32, height: f32) {
+    fn render(&mut self, ui: &imgui::Ui, emulator: &mut Emulator, width: f32, height: f32) {
         ui.window("Memory")
             .resizable(false)
             .collapsible(false)

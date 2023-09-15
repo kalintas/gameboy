@@ -4,17 +4,17 @@ use crate::emulator::Cpu;
 use crate::emulator::memory_map::MemoryMap;
 
 
-/// JR r8 <br>
+/// JR r8 - 0x18 <br>
 ///  Length in bytes: 2 <br>
 ///  Duration in cycles: 12 <br>
 ///  Flags affected: - - - - 
 pub fn jr_r8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    
-    cpu.pc = (cpu.pc as i16 + memory_map.get(cpu.pc + 1) as i16) as u16;
+        
+    cpu.pc = (cpu.pc as i32 + (memory_map.get(cpu.pc + 1) as i8) as i32) as u16 + 2; // +2 is for this instructions length
     12
 }
 
-/// JR NZ,r8 <br>
+/// JR NZ,r8 - 0x20 <br>
 ///  Length in bytes: 2 <br>
 ///  Duration in cycles: 12/8 <br>
 ///  Flags affected: - - - - 
@@ -27,7 +27,7 @@ pub fn jr_nz_r8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     8
 }
 
-/// JR Z,r8 <br>
+/// JR Z,r8 - 0x28 <br>
 ///  Length in bytes: 2 <br>
 ///  Duration in cycles: 12/8 <br>
 ///  Flags affected: - - - - 
@@ -40,7 +40,7 @@ pub fn jr_z_r8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     8
 }
 
-/// JR NC,r8 <br>
+/// JR NC,r8 - 0x30 <br>
 ///  Length in bytes: 2 <br>
 ///  Duration in cycles: 12/8 <br>
 ///  Flags affected: - - - - 
@@ -53,7 +53,7 @@ pub fn jr_nc_r8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     8
 }
 
-/// JR C,r8 <br>
+/// JR C,r8 - 0x38 <br>
 ///  Length in bytes: 2 <br>
 ///  Duration in cycles: 12/8 <br>
 ///  Flags affected: - - - - 
@@ -66,20 +66,21 @@ pub fn jr_c_r8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     8
 }
 
-/// RET NZ <br>
+/// RET NZ - 0xC0 <br>
 ///  Length in bytes: 1 <br>
 ///  Duration in cycles: 20/8 <br>
 ///  Flags affected: - - - - 
 pub fn ret_nz(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     
     if cpu.registers.get_z() == 0 {
-        return ret(cpu, memory_map);
+        ret(cpu, memory_map);
+        20
+    } else {
+        8
     }
-    
-    8
 }
 
-/// JP NZ,a16 <br>
+/// JP NZ,a16 - 0xC2 <br>
 ///  Length in bytes: 3 <br>
 ///  Duration in cycles: 16/12 <br>
 ///  Flags affected: - - - - 
@@ -92,7 +93,7 @@ pub fn jp_nz_a16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     12
 }
 
-/// JP a16 <br>
+/// JP a16 - 0xC3 <br>
 ///  Length in bytes: 3 <br>
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - - 
@@ -103,7 +104,7 @@ pub fn jp_a16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     16
 }
 
-/// CALL NZ,a16 <br>
+/// CALL NZ,a16 - 0xC4 <br>
 ///  Length in bytes: 3 <br>
 ///  Duration in cycles: 24/12 <br>
 ///  Flags affected: - - - - 
@@ -116,41 +117,44 @@ pub fn call_nz_a16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     12
 }
 
-/// RST 00H <br>
+/// RST 00H - 0xC7 <br>
 ///  Length in bytes: 1 <br>
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - - 
 pub fn rst_00h(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    
+    cpu.call(memory_map, 0x00);
     16
 }
 
-/// RET Z <br>
+/// RET Z - 0xC8 <br>
 ///  Length in bytes: 1 <br>
 ///  Duration in cycles: 20/8 <br>
 ///  Flags affected: - - - - 
 pub fn ret_z(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 
     if cpu.registers.get_z() == 1 {
-        return ret(cpu, memory_map);
+        ret(cpu, memory_map);
+        20
+    } else {
+        8
     }
-
-    8
 }
 
-/// RET <br>
+/// RET - 0xC9 <br>
 ///  Length in bytes: 1 <br>
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - - 
 pub fn ret(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     
-    cpu.pc = memory_map.get_u16(cpu.sp);
+    // Add 1(All ret instructions length is 1) to pc. 
+    // If this is not done pc will be set to call instructions address.(Thus creating an infinite loop) 
+    cpu.pc = memory_map.get_u16(cpu.sp) + 1; 
     cpu.sp += 2;
 
     16
 }
 
-/// JP Z,a16 <br>
+/// JP Z,a16 - 0xCA <br>
 ///  Length in bytes: 3 <br>
 ///  Duration in cycles: 16/12 <br>
 ///  Flags affected: - - - - 
@@ -163,7 +167,7 @@ pub fn jp_z_a16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     12
 }
 
-/// CALL Z,a16 <br>
+/// CALL Z,a16 - 0xCC <br>
 ///  Length in bytes: 3 <br>
 ///  Duration in cycles: 24/12 <br>
 ///  Flags affected: - - - - 
@@ -176,42 +180,41 @@ pub fn call_z_a16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     12
 }
 
-/// CALL a16 <br>
+/// CALL a16 - 0xCD <br>
 ///  Length in bytes: 3 <br>
 ///  Duration in cycles: 24 <br>
 ///  Flags affected: - - - - 
 pub fn call_a16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 
-    cpu.sp -= 2;
-    memory_map.set_u16(cpu.sp, cpu.pc);
-    cpu.pc = memory_map.get_u16(cpu.pc + 1);
+    cpu.call(memory_map, memory_map.get_u16(cpu.pc + 1));
 
     24
 }
 
-/// RST 08H <br>
+/// RST 08H - 0xCF <br>
 ///  Length in bytes: 1 <br>
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - - 
 pub fn rst_08h(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    
+    cpu.call(memory_map, 0x08);
     16
 }
 
-/// RET NC <br>
+/// RET NC - 0xD0 <br>
 ///  Length in bytes: 1 <br>
 ///  Duration in cycles: 20/8 <br>
 ///  Flags affected: - - - - 
 pub fn ret_nc(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     
     if cpu.registers.get_cy() == 0 {
-        return ret(cpu, memory_map);
+        ret(cpu, memory_map);
+        20
+    } else {
+        8
     }
-
-    8
 }
 
-/// JP NC,a16 <br>
+/// JP NC,a16 - 0xD2 <br>
 ///  Length in bytes: 3 <br>
 ///  Duration in cycles: 16/12 <br>
 ///  Flags affected: - - - - 
@@ -224,7 +227,7 @@ pub fn jp_nc_a16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     12
 }
 
-/// CALL NC,a16 <br>
+/// CALL NC,a16 - 0xD4 <br>
 ///  Length in bytes: 3 <br>
 ///  Duration in cycles: 24/12 <br>
 ///  Flags affected: - - - - 
@@ -237,40 +240,41 @@ pub fn call_nc_a16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     12
 }
 
-/// RST 10H <br>
+/// RST 10H - 0xD7 <br>
 ///  Length in bytes: 1 <br>
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - - 
 pub fn rst_10h(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    
+    cpu.call(memory_map, 0x10);
     16
 }
 
-/// RET C <br>
+/// RET C - 0xD8 <br>
 ///  Length in bytes: 1 <br>
 ///  Duration in cycles: 20/8 <br>
 ///  Flags affected: - - - - 
 pub fn ret_c(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     
     if cpu.registers.get_cy() == 1 {
-        return ret(cpu, memory_map);
+        ret(cpu, memory_map);
+        20
+    } else {
+        8
     }
-
-    8
 }
 
-/// RETI <br>
+/// RETI - 0xD9 <br>
 ///  Length in bytes: 1 <br>
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - - 
 pub fn reti(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 
-    unimplemented!();
-
-    16
+    // Return and enable interrupts (IME=1)
+    cpu.enable_interrupts();
+    ret(cpu, memory_map)
 }
 
-/// JP C,a16 <br>
+/// JP C,a16 - 0xDA <br>
 ///  Length in bytes: 3 <br>
 ///  Duration in cycles: 16/12 <br>
 ///  Flags affected: - - - - 
@@ -283,7 +287,7 @@ pub fn jp_c_a16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     12
 }
 
-/// CALL C,a16 <br>
+/// CALL C,a16 - 0xDC <br>
 ///  Length in bytes: 3 <br>
 ///  Duration in cycles: 24/12 <br>
 ///  Flags affected: - - - - 
@@ -296,58 +300,57 @@ pub fn call_c_a16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     12
 }
 
-/// RST 18H <br>
+/// RST 18H - 0xDF <br>
 ///  Length in bytes: 1 <br>
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - - 
 pub fn rst_18h(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    
+    cpu.call(memory_map, 0x18);
     16
 }
 
-/// RST 20H <br>
+/// RST 20H - 0xE7 <br>
 ///  Length in bytes: 1 <br>
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - - 
 pub fn rst_20h(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    
+    cpu.call(memory_map, 0x20);
     16
 }
 
-/// JP (HL) <br>
+/// JP (HL) - 0xE9 <br>
 ///  Length in bytes: 1 <br>
 ///  Duration in cycles: 4 <br>
 ///  Flags affected: - - - - 
 pub fn jp_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     
     cpu.pc = cpu.registers.hl();
-
     4
 }
 
-/// RST 28H <br>
+/// RST 28H - 0xEF <br>
 ///  Length in bytes: 1 <br>
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - - 
 pub fn rst_28h(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    
+    cpu.call(memory_map, 0x28);
     16
 }
 
-/// RST 30H <br>
+/// RST 30H - 0xF7 <br>
 ///  Length in bytes: 1 <br>
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - - 
 pub fn rst_30h(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    
+    cpu.call(memory_map, 0x30);
     16
 }
 
-/// RST 38H <br>
+/// RST 38H - 0xFF <br>
 ///  Length in bytes: 1 <br>
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - - 
 pub fn rst_38h(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    
+    cpu.call(memory_map, 0x38);
     16
 }
