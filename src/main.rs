@@ -1,5 +1,4 @@
 #![feature(const_mut_refs)]
-#![feature(is_some_and)]
 
 mod emulator;
 mod emulator_renderer;

@@ -14,7 +14,7 @@ pub fn nop(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 }
 
 /// STOP 0 - 0x10 <br>
-///  Length in bytes: 2 <br>
+///  Length in bytes: 1 <br>
 ///  Duration in cycles: 4 <br>
 ///  Flags affected: - - - - 
 pub fn stop_0(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {

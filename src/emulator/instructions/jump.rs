@@ -10,7 +10,7 @@ use crate::emulator::memory_map::MemoryMap;
 ///  Flags affected: - - - - 
 pub fn jr_r8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
         
-    cpu.pc = (cpu.pc as i32 + (memory_map.get(cpu.pc + 1) as i8) as i32) as u16 + 2; // +2 is for this instructions length
+    cpu.pc = (cpu.pc as i32 + (cpu.get_immediate_u8(memory_map) as i8) as i32) as u16;
     12
 }
 
@@ -99,7 +99,7 @@ pub fn jp_nz_a16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Flags affected: - - - - 
 pub fn jp_a16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     
-    cpu.pc = memory_map.get_u16(cpu.pc + 1);
+    cpu.pc = cpu.get_immediate_u16(memory_map);
 
     16
 }
@@ -146,9 +146,7 @@ pub fn ret_z(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Flags affected: - - - - 
 pub fn ret(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     
-    // Add 1(All ret instructions length is 1) to pc. 
-    // If this is not done pc will be set to call instructions address.(Thus creating an infinite loop) 
-    cpu.pc = memory_map.get_u16(cpu.sp) + 1; 
+    cpu.pc = memory_map.get_u16(cpu.sp) as u16; 
     cpu.sp += 2;
 
     16
@@ -186,7 +184,7 @@ pub fn call_z_a16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Flags affected: - - - - 
 pub fn call_a16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 
-    cpu.call(memory_map, memory_map.get_u16(cpu.pc + 1));
+    cpu.call(memory_map, cpu.get_immediate_u16(memory_map));
 
     24
 }

@@ -1,9 +1,11 @@
 use crate::emulator::Emulator;
 
-use super::Panel;
+use super::{Panel, GoToLinePopup};
 
 pub struct MemoryPanel {
     string: Box<[u8; 0x1000 * 57]>,
+
+    go_to_line_popup: GoToLinePopup,
 }
 
 impl MemoryPanel {
@@ -30,12 +32,28 @@ impl MemoryPanel {
             string[t + 56] = '\n' as u8;
         }
 
-        Self { string }
+        Self { 
+            string, 
+            go_to_line_popup: GoToLinePopup::new("Go To Line###memory") 
+        }
+    }
+    
+    // A round function for hexadecimal integer rounding.
+    // 0x105 -> 0x100, 0x108 -> 0x110
+    fn round(val: u32) -> u32 {
+
+        let floored = val & 0xFFF0;
+
+        if val % 0x10 < 0x8 {
+            floored
+        } else {
+            (floored) + 0x10
+        }
     }
 }
 
 impl Panel for MemoryPanel {
-    fn update(&mut self, emulator: &Emulator, changes: &[(usize, u8)]) {
+    fn update(&mut self, _: &Emulator, changes: &[(usize, u8)]) {
         for (address, value) in changes.iter() {
             let index = (address / 0x10) * 57 + (address % 0x10) * 2 + 6;
 
@@ -54,15 +72,21 @@ impl Panel for MemoryPanel {
         }
     }
 
-    fn render(&mut self, ui: &imgui::Ui, emulator: &mut Emulator, width: f32, height: f32) {
+    fn render(&mut self, ui: &imgui::Ui, _: &mut Emulator, width: f32, height: f32) {
         ui.window("Memory")
             .resizable(false)
             .collapsible(false)
             .movable(false)
+            .bring_to_front_on_focus(false)
             .position([0.0, height * 0.5 + 19.0], imgui::Condition::Always)
             .size([width * 2.0 / 3.0, height * 0.5], imgui::Condition::Always)
             .build(|| {
                 ui.set_window_font_scale(1.2);
+
+                self.go_to_line_popup
+                    .render(ui,
+                        |scroll| Self::round((scroll * 0xFFF0 as f32) as u32), 
+                        |line| Self::round(line) as f32 / 0xFFF0 as f32);
 
                 let string = std::str::from_utf8(&*self.string).unwrap();
 

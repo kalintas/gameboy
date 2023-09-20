@@ -8,6 +8,8 @@ gl = "0.14.0"
 imgui = { git = "https://github.com/imgui-rs/imgui-rs" }
 imgui-sdl2-support  = { git = "https://github.com/imgui-rs/imgui-rs" }
 imgui-glow-renderer  = { git = "https://github.com/imgui-rs/imgui-rs" }
+strum = "0.25"
+strum_macros = "0.25"
 
 [dependencies.sdl2]
 version = "0.34.5"

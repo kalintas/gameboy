@@ -1,9 +1,7 @@
 use std::{error::Error, time::Instant};
 
-use imgui::StyleColor;
 use sdl2::{
     event::{Event, WindowEvent},
-    keyboard::Keycode,
     video::{GLContext, GLProfile, SwapInterval},
     EventPump,
 };
@@ -59,8 +57,6 @@ impl Renderer {
         video_subsys.gl_set_swap_interval(SwapInterval::VSync)?;
 
         let mut imgui = imgui::Context::create();
-
-        imgui.set_ini_filename(None);
 
         // imgui.style_mut().window_padding = [15.0, 15.0];
         // imgui.style_mut().window_rounding = 0.0;
@@ -150,11 +146,7 @@ impl Renderer {
             self.imgui_sdl.handle_event(&mut self.imgui, &event);
 
             match event {
-                Event::Quit { .. }
-                | Event::KeyDown {
-                    keycode: Some(Keycode::Escape),
-                    ..
-                } => return true,
+                Event::Quit { .. } => return true,
                 Event::Window { win_event, .. } => match win_event {
                     WindowEvent::Resized(width, height) => {
                         self.window_width = width as u32;
@@ -174,6 +166,7 @@ impl Renderer {
         gl_call!(gl::ClearColor(0.0, 0.0, 0.0, 1.0));
     }
 
+    #[allow(dead_code)]
     pub fn get_frame(&mut self) -> &imgui::Ui {
         // Update imgui's delta time.
         self.imgui.io_mut().delta_time = self.last_frame.elapsed().as_secs_f32();
@@ -186,6 +179,7 @@ impl Renderer {
         self.imgui.frame()
     }
 
+    #[allow(dead_code)]
     pub fn render_frame(&mut self) {
         let draw_data = self.imgui.render();
 

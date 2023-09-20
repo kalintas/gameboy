@@ -13,24 +13,12 @@ Memory map of the gameboy(from pandocs: http://bgb.bircd.org/pandocs.htm):
     FF80-FFFE   High RAM (HRAM)
     FFFF        Interrupt Enable Register
 */
-
 use std::path::Path;
-
-pub struct MemoryMap {
-    rom_banks: [[u8; 0x4000]; 2], // 16KB rom banks that is 'in the cartridge'.
-    vrams: [[u8; 0x2000]; 2],     // 8KB video rams(VRAM)
-    external_ram: [u8; 0x2000],   // 8KB external ram that is'in the cartridge'.
-    wrams: [[u8; 0x1000]; 8],     // 4KB work rams(WRAM)
-    oam: [u8; 0x100],             // Sprite Attribute Table(OAM)
-    io_ports: [u8; 0x80],
-    high_ram: [u8; 0x7F],
-    ier: u8, // Interrupt Enable Register
-
-    pub changes: Vec<(usize, u8)>,
-}
+use strum_macros::{EnumIter, AsRefStr};
 
 #[repr(u16)]
 #[allow(dead_code)]
+#[derive(Clone, Copy, Debug, EnumIter, AsRefStr)]
 pub enum Io {
     LCDC = 0xFF40,  // LCD Control (R/W)
     STAT = 0xFF41,  // LCDC Status (R/W)
@@ -87,6 +75,19 @@ pub enum Io {
     KEY1 = 0xFF4D,  // CGB Mode Only - Prepare Speed Switch
     RP = 0xFF56,    // CGB Mode Only - Infrared Communications Port
     SVBK = 0xFF70,  // CGB Mode Only - WRAM Bank
+}
+
+pub struct MemoryMap {
+    rom_banks: [[u8; 0x4000]; 2], // 16KB rom banks that is 'in the cartridge'.
+    vrams: [[u8; 0x2000]; 2],     // 8KB video rams(VRAM)
+    external_ram: [u8; 0x2000],   // 8KB external ram that is'in the cartridge'.
+    wrams: [[u8; 0x1000]; 8],     // 4KB work rams(WRAM)
+    oam: [u8; 0x100],             // Sprite Attribute Table(OAM)
+    io_ports: [u8; 0x80],
+    high_ram: [u8; 0x7F],
+    ier: u8, // Interrupt Enable Register
+
+    pub changes: Vec<(usize, u8)>,
 }
 
 impl MemoryMap {
@@ -149,12 +150,20 @@ impl MemoryMap {
         self.rom_banks[0].copy_from_slice(&rom[..0x4000]);
         self.rom_banks[1].copy_from_slice(&rom[0x4000..0x8000]);
 
+        self.changes.reserve(rom.len() - self.changes.len());
+
         for i in 0..rom.len() {
             self.changes.push((i, rom[i]));
         }
     }
 
-    pub fn set(&mut self, address: u16, value: u8) {
+    // TODO:
+    //  When the display is disabled, both VRAM and OAM are accessable at any time. 
+    // The downside is that the screen is blank (white) during this period, 
+    // so that disabling the display would be recommended only during initialization.
+
+    pub fn set(&mut self, address: u16, mut value: u8) {
+        
         let address = address as usize;
 
         self.changes.push((address, value));
@@ -165,7 +174,13 @@ impl MemoryMap {
             // panic!("Tried to mutate immutable rom data");
         } else if address < 0xA000 {
             // 8000-9FFF   8KB Video RAM (VRAM)
-            self.vrams[0][address - 0x8000] = value;
+
+            // TODO: currently LCD doesnt work if this is not commented.
+            // if self.get_io(Io::STAT) & 0x3 != 0x3 {
+                // Ppu is not in pixel transfer mode.
+                self.vrams[0][address - 0x8000] = value;
+            // }
+
         } else if address < 0xC000 {
             // A000-BFFF   8KB External RAM
             self.external_ram[address - 0xA000] = value;
@@ -180,19 +195,37 @@ impl MemoryMap {
             return self.set(address as u16 - 0x2000, value);
         } else if address < 0xFEA0 {
             // FE00-FE9F   Sprite Attribute Table (OAM)
-            self.oam[address - 0xFE00] = value;
+
+            if self.get_io(Io::STAT) & 0x2 == 0 {
+                // Ppu is not in pixel transfer or OAM search mode.
+                self.oam[address - 0xFE00] = value;
+            }
+
         } else if address < 0xFF00 {
             // FEA0-FEFF   Not Usable
             // panic!("Tried to write a non usable memory block");
         } else if address < 0xFF80 {
             // FF00-FF7F   I/O Ports
+
+            // DIV: Divider register, writing any value to this register resets it to 0x00
+            if address == Io::DIV as _ {
+                value = 0;
+            } else if address == Io::DMA as _ {
+                // TODO: DMA transfer.
+            }
+
+            // BIG TODO:
+            if address == Io::LCDC as _ {
+                return;
+            }
+
             self.io_ports[address - 0xFF00] = value;
         } else if address < 0xFFFF {
             self.high_ram[address - 0xFF80] = value;
         } else {
             self.ier = value;
         }
-    }
+    }   
 
     pub fn get(&self, address: u16) -> u8 {
         let address = address as usize;
@@ -206,6 +239,11 @@ impl MemoryMap {
             return self.rom_banks[1][address - 0x4000];
         }
         if address < 0xA000 {
+
+            if self.get_io(Io::STAT) & 0x3 == 0x3 {
+                // Ppu is in pixel transfer mode.
+                return 0xFF;
+            }
             // 8000-9FFF   8KB Video RAM (VRAM)
             return self.vrams[0][address - 0x8000];
         }
@@ -227,6 +265,12 @@ impl MemoryMap {
         }
         if address < 0xFEA0 {
             // FE00-FE9F   Sprite Attribute Table (OAM)
+            
+            if self.get_io(Io::STAT) & 0x2 != 0 {
+                // Ppu is in pixel transfer or OAM search mode.
+                return 0xFF;
+            }
+
             return self.oam[address - 0xFE00];
         }
         if address < 0xFF00 {
@@ -266,6 +310,12 @@ impl MemoryMap {
 
     pub fn set_io(&mut self, address: Io, value: u8) {
         self.set(address as u16, value)
+    }
+
+    // DIV register is a special I/O port that only cpu can write. 
+    // When programmer tries to write to this register it automatically set to 0.
+    pub fn increment_div(&mut self) {
+        self.io_ports[Io::DIV as usize - 0xFF00] = self.io_ports[Io::DIV as usize - 0xFF00].wrapping_add(1);
     }
 
 }

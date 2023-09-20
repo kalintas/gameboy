@@ -44,9 +44,17 @@ function processTable(tableId) {
 
 
                 const instructionName = match[1];
-                const lengthInBytes = match[2];
+                let lengthInBytes = match[2];
                 const durationInCycles = match[3];
                 const flagsAffected = match[4];
+                
+                // https://stackoverflow.com/questions/41353869/length-of-instruction-ld-a-c-in-gameboy-z80-processor
+                // There is a error in the Pastraiser opcode table that is 
+                // LD (C) A and LD A (C) instructions are written as 2 bytes long instead of 1. 
+                // Besides that STOP 0 instructions lengthInBytes also should be 1 explained above.
+                if (instructionName === "LD (C),A" || instructionName === "LD A,(C)" || instructionName === "STOP 0") {
+                    lengthInBytes = 1;
+                }
 
                 const backgroundColor = row.cells[j].bgColor;
 

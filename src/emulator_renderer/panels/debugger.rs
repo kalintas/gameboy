@@ -1,8 +1,16 @@
-use imgui::{SelectableFlags, StyleColor};
+use std::time::Instant;
+
+use imgui::StyleColor;
 
 use crate::emulator::{cpu::Cpu, Emulator};
 
-use super::Panel;
+use super::{Panel, GoToLinePopup};
+
+// BIG TODO:
+// Disassembly could end up wrong in some cases.
+// Do we need to store all Strings? 
+// Find a way to create the display on the fly. -> This will solve all updating costs and will make it real-time updatable
+// Currently it works but this update is required immediately.
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Breakpoint {
@@ -20,6 +28,10 @@ pub struct DebuggerPanel {
     pub toggled_breakpoint: Option<Breakpoint>,
 
     runinng_next_line: bool,
+    clock_timer: Instant,
+    update_required: bool,
+
+    go_to_line_popup: GoToLinePopup,
 }
 
 impl DebuggerPanel {
@@ -40,6 +52,10 @@ impl DebuggerPanel {
             toggled_breakpoint: None,
 
             runinng_next_line: false,
+            clock_timer: Instant::now(),
+            update_required: true,
+
+            go_to_line_popup: GoToLinePopup::new("Go To Line###debugger"),
         }
     }
 
@@ -60,16 +76,22 @@ impl DebuggerPanel {
         
         if self.toggled_breakpoint.is_none() {
 
-            // TODO: works only in Vsync
-            while emulator.cpu.clock_cycles < 69905 {
-                emulator.cycle();
-            }
+            let now = Instant::now();
+            let elapsed_time = (now - self.clock_timer).as_secs_f32();
 
-            emulator.cpu.clock_cycles = 0;
+            emulator.cycle(elapsed_time, Some(|pc| {
+
+                self
+                .breakpoints
+                .iter()
+                .any(|point| point.pointer == pc) 
+            }));
+
+            self.clock_timer = now;
 
         } else if self.runinng_next_line {
 
-            emulator.cycle();
+            emulator.cycle_once();
 
             self.pause(&emulator);
             
@@ -91,6 +113,7 @@ impl DebuggerPanel {
         // Save the last breakpoint to make sure to not hit the same breakpoint after continue.
         self.continued_breakpoint = self.toggled_breakpoint; 
         self.toggled_breakpoint = None;
+        self.clock_timer = Instant::now();
     }
 
     pub fn run_to_next_line(&mut self) {
@@ -103,6 +126,12 @@ impl DebuggerPanel {
     pub fn pause(&mut self, emulator: &Emulator) {
 
         self.toggled_breakpoint = Some(Breakpoint { row: self.get_pc_row(emulator), pointer: emulator.cpu.pc });
+        
+        if self.update_required {
+
+            self.update_strings(emulator);
+            self.update_required = false;
+        }
     }
 
     fn get_pc_row(&self, emulator: &Emulator) -> i32 {
@@ -118,14 +147,9 @@ impl DebuggerPanel {
 
         row
     }
-}
 
-impl Panel for DebuggerPanel {
-    fn update(&mut self, emulator: &Emulator, changes: &[(usize, u8)]) {
-        if changes.is_empty() {
-            return;
-        }
-
+    fn update_strings(&mut self, emulator: &Emulator) {
+        
         self.strings.clear();
 
         let mut index: usize = 0;
@@ -189,12 +213,33 @@ impl Panel for DebuggerPanel {
         }
     }
 
+}
+
+impl Panel for DebuggerPanel {
+    fn update(&mut self, emulator: &Emulator, changes: &[(usize, u8)]) {
+
+        // TODO: make this work in realtime.
+
+        // Debugger panel only updated when the debugger is paused. 
+        // This is done because updating the panel is very expensive.
+
+        if !changes.is_empty() {
+
+            if self.toggled_breakpoint.is_some() {
+                self.update_strings(emulator);
+            } else {
+                self.update_required = true;
+            }
+        }
+    }
+
     fn render(&mut self, ui: &imgui::Ui, emulator: &mut Emulator, width: f32, height: f32) {
         ui.window("Debugger")
             .resizable(false)
             .collapsible(false)
             .movable(false)
             .menu_bar(true)
+            .bring_to_front_on_focus(false)
             .position([width * 0.5, 19.0], imgui::Condition::Always)
             .size([width * 0.5, height * 0.5], imgui::Condition::Always)
             .build(|| {
@@ -220,7 +265,7 @@ impl Panel for DebuggerPanel {
                     // Run to next line button
                     ui.same_line();
                     if ui.arrow_button("##2", imgui::Direction::Down)
-                        || ui.is_key_pressed(imgui::Key::F10)
+                        || ui.is_key_pressed_no_repeat(imgui::Key::F10)
                     {
                         self.run_to_next_line();
                     }
@@ -272,6 +317,34 @@ impl Panel for DebuggerPanel {
                     }
                 }
 
+                // Go to line popup
+                self.go_to_line_popup
+                    .render(ui,
+                    |scroll| {
+
+                        let line = (self.strings.len() as f32 * scroll) as u32;
+                        let mut pointer = 0;
+
+                        for _ in 0..line {
+                            pointer += Cpu::decode(pointer as _, &emulator.memory_map).length as u32;
+                        }   
+
+                        pointer
+                    },
+                    |pointer| {
+
+                        let mut line = 0;
+                        let mut current_pointer = 0;
+
+                        while current_pointer < pointer  {
+
+                            current_pointer += Cpu::decode(current_pointer as _, &emulator.memory_map).length as u32;
+                            line += 1;
+                        }   
+
+                        line as f32 / self.strings.len() as f32
+                    });
+
                 // Use a list clipper for efficient rendering.
                 // This will only render visible lines of the text.
                 let clipper = imgui::ListClipper::new(self.strings.len() as i32)
@@ -288,7 +361,7 @@ impl Panel for DebuggerPanel {
                     if breakpoint.is_some() {
                         text_color =
                             Some(ui.push_style_color(StyleColor::Text, [1.0, 0.0, 0.0, 1.0]));
-                    }
+                    } 
 
                     if ui.selectable_config(&self.strings[current_row as usize])
                         .selected(self.toggled_breakpoint.is_some_and(|breakpoint| breakpoint.row == current_row))

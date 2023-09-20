@@ -165,7 +165,7 @@ pub fn dec_h(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 4 <br>
 ///  Flags affected: Z - 0 C 
 pub fn daa(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    std::unimplemented!();
+    std::unimplemented!()
     // 4
 }
 
@@ -898,7 +898,7 @@ pub fn cp_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 0 H C 
 pub fn add_a_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.add(memory_map.get(cpu.pc + 1));
+    cpu.add(cpu.get_immediate_u8(memory_map));
     8
 }
 
@@ -907,7 +907,7 @@ pub fn add_a_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 0 H C 
 pub fn adc_a_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.adc(memory_map.get(cpu.pc + 1));
+    cpu.adc(cpu.get_immediate_u8(memory_map));
     8
 }
 
@@ -916,7 +916,7 @@ pub fn adc_a_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 1 H C 
 pub fn sub_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.sub(memory_map.get(cpu.pc + 1));
+    cpu.sub(cpu.get_immediate_u8(memory_map));
     8
 }
 
@@ -925,7 +925,7 @@ pub fn sub_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 1 H C 
 pub fn sbc_a_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.sbc(memory_map.get(cpu.pc + 1));
+    cpu.sbc(cpu.get_immediate_u8(memory_map));
     8
 }
 
@@ -934,7 +934,7 @@ pub fn sbc_a_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 0 1 0 
 pub fn and_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.and(memory_map.get(cpu.pc + 1));
+    cpu.and(cpu.get_immediate_u8(memory_map));
     8
 }
 
@@ -946,7 +946,7 @@ pub fn add_sp_r8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     
     // https://stackoverflow.com/questions/57958631/game-boy-half-carry-flag-and-16-bit-instructions-especially-opcode-0xe8
 
-    let val = memory_map.get(cpu.pc + 1);
+    let val = cpu.get_immediate_u8(memory_map);
 
     let half_carry = (cpu.sp & 0xF + (val as u16) & 0xF) > 0xF;
     let carry = (cpu.sp & 0xFF + (val as u16) & 0xFF) > 0xFF;
@@ -963,7 +963,7 @@ pub fn add_sp_r8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 0 0 0 
 pub fn xor_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.xor(memory_map.get(cpu.pc + 1));
+    cpu.xor(cpu.get_immediate_u8(memory_map));
     8
 }
 
@@ -972,7 +972,7 @@ pub fn xor_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 0 0 0 
 pub fn or_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.or(memory_map.get(cpu.pc + 1));
+    cpu.or(cpu.get_immediate_u8(memory_map));
     8
 }
 
@@ -982,7 +982,7 @@ pub fn or_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Flags affected: Z 1 H C 
 pub fn cp_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     let old_a = cpu.registers.a;
-    cpu.sub(memory_map.get(cpu.pc + 1));
+    cpu.sub(cpu.get_immediate_u8(memory_map));
     cpu.registers.a = old_a;
     8
 }

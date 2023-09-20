@@ -1,6 +1,6 @@
 use super::{
     instructions::{Instruction, INSTRUCTIONS, PREFIX_CB_INSTRUCTIONS},
-    memory_map::MemoryMap,
+    memory_map::{MemoryMap, Io},
     registers::Registers,
 };
 
@@ -36,6 +36,10 @@ impl Cpu {
 
     pub fn cycle(&mut self, memory_map: &mut MemoryMap) {
 
+        if self.handle_interrupts(memory_map) {
+            return;
+        }
+
         let instruction = Self::decode(self.pc, &memory_map);
 
         self.execute(instruction, memory_map);
@@ -58,19 +62,83 @@ impl Cpu {
 
     pub fn execute(&mut self, instruction: Instruction, memory_map: &mut MemoryMap) {
         
-        // TODO: maybe fix this?
-        let old_pc = self.pc;
+        self.pc += instruction.length as u16;
 
-        self.clock_cycles += (instruction.function)(self, memory_map) as u32;
+        let instruction_cycles = (instruction.function)(self, memory_map) as u32;
 
-        // Didn't jump to another location.
-        if self.pc == old_pc {
-            self.pc += instruction.length as u16;
-        }
-
+        self.clock_cycles = self.clock_cycles.wrapping_add(instruction_cycles);
     }
 
+    fn handle_interrupt(&mut self, memory_map: &MemoryMap) -> Option<(u16, u8)> {
+        /*
+            From pandocs:
+            Provided that IME and IE allow the execution of more than one of the requested interrupts, 
+            then the interrupt with the highest priority becomes executed first. 
+            The priorities are ordered as the bits in the IE and IF registers, 
+            Bit 0 (V-Blank) having the highest priority, and Bit 4 (Joypad) having the lowest priority.
+        */
+        
+        let ie_reg = memory_map.get_io(Io::IE);
+        let if_reg = memory_map.get_io(Io::IF);
+        let interrupt = ie_reg & if_reg;
+
+        if interrupt & 0x1 != 0 {
+            // V-Blank interrupt
+            // println!("VBLANK");
+            return Some((0x40, if_reg & 0x1E));
+        } else if interrupt & 0x2 != 0 {
+            // LCD STAT interrupt 
+            return Some((0x48, if_reg & 0xFD));
+        } else if interrupt & 0x4 != 0 {
+            // Timer interrupt
+            return Some((0x50, if_reg & 0xFB));
+        } else if interrupt & 0x8 != 0 {
+            // Serial interrupt
+            return Some((0x58, if_reg & 0xF7));
+        } else if interrupt & 0x10 != 0 {
+            // Joypad interrupt
+            return Some((0x60, if_reg & 0xEF));
+        }
+
+        return None;
+    }
+
+    pub fn handle_interrupts(&mut self, memory_map: &mut MemoryMap) -> bool {
+
+        if !self.ime {
+            return false;
+        }
+
+        if let Some((interrupt_address, new_if_reg)) = self.handle_interrupt(&memory_map) {
+
+            self.ime = false;
+            
+            self.call(memory_map, interrupt_address);
+            
+            // Replace the if flag.
+            memory_map.set_io(Io::IF, new_if_reg);
+
+            // TODO: "The entire routine should last a total of 5 M-cycles." 5 M-cycles =? 20
+            self.clock_cycles = self.clock_cycles.wrapping_add(20);
+            
+            true
+        } else {
+            false
+        }
+    }
+
+
     ///////////////////////////////////////////////////
+    
+    // Get immediate byte after an instruction.
+    pub fn get_immediate_u8(&self, memory_map: &MemoryMap) -> u8 {
+        memory_map.get(self.pc - 1)
+    }
+
+    // Get immediate two bytes after an instruction.
+    pub fn get_immediate_u16(&self, memory_map: &MemoryMap) -> u16 {
+        memory_map.get_u16(self.pc - 2)
+    }
 
     pub fn add(&mut self, rhs: u8) {
         

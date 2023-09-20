@@ -1,6 +1,6 @@
-use crate::emulator::{Emulator, memory_map};
+use crate::emulator::{Emulator, memory_map::{self, Io}};
 
-use super::{Panel, memory};
+use super::Panel;
 
 pub struct RegistersPanel {}
 
@@ -11,13 +11,14 @@ impl RegistersPanel {
 }
 
 impl Panel for RegistersPanel {
-    fn update(&mut self, emulator: &Emulator, changes: &[(usize, u8)]) {}
+    fn update(&mut self, _: &Emulator, _: &[(usize, u8)]) {}
 
     fn render(&mut self, ui: &imgui::Ui, emulator: &mut Emulator, width: f32, height: f32) {
         ui.window("Registers")
             .resizable(false)
             .collapsible(false)
             .movable(false)
+            .bring_to_front_on_focus(false)
             .position(
                 [width * 2.0 / 3.0, height * 0.5 + 19.0],
                 imgui::Condition::Always,
@@ -25,25 +26,60 @@ impl Panel for RegistersPanel {
             .size([width / 3.0, height * 0.5], imgui::Condition::Always)
             .build(|| {
                 ui.set_window_font_scale(1.2);
-                
+
                 // Cpu registers
                 let mut z = emulator.cpu.registers.get_z() == 1;
                 let mut h = emulator.cpu.registers.get_h() == 1;
                 let mut n = emulator.cpu.registers.get_n() == 1;
                 let mut cy = emulator.cpu.registers.get_cy() == 1;
 
-                ui.text(format!("af: {:04x}", emulator.cpu.registers.af()));
-                ui.same_line(); ui.checkbox("Z", &mut z);
-                ui.text(format!("bc: {:04x}", emulator.cpu.registers.bc()));
-                ui.same_line(); ui.checkbox("H", &mut h);
-                ui.text(format!("de: {:04x}", emulator.cpu.registers.de()));
-                ui.same_line(); ui.checkbox("N", &mut n);
-                ui.text(format!("hl: {:04x}", emulator.cpu.registers.hl()));
-                ui.same_line(); ui.checkbox("CY", &mut cy);
-                ui.text(format!("sp: {:04x}", emulator.cpu.sp));
-                ui.text(format!("pc: {:04x}", emulator.cpu.pc));
+                let mut flags_changed = false;
 
-                emulator.cpu.registers.set_flags(z as u8, n as u8, h as u8, cy as u8);
+                let input_box = |name: &'static str, mut value| -> Option<u16> {
+
+                    ui.set_next_item_width(75.0);
+                    if ui.input_scalar(name, &mut value)
+                        .chars_hexadecimal(true)
+                        .chars_uppercase(true)
+                        .display_format("%04x").build() {
+                        Some(value)
+                    } else {
+                        None
+                    }
+                };
+                
+                if let Some (af) = input_box("af", emulator.cpu.registers.af()) {
+                    emulator.cpu.registers.set_af(af);
+                }
+                ui.same_line(); 
+                flags_changed |= ui.checkbox("Z", &mut z);
+                                
+                if let Some (bc) = input_box("bc", emulator.cpu.registers.bc()) {
+                    emulator.cpu.registers.set_bc(bc);
+                }                ui.same_line(); 
+                flags_changed |= ui.checkbox("H", &mut h);
+                
+                if let Some (de) = input_box("de", emulator.cpu.registers.de()) {
+                    emulator.cpu.registers.set_de(de);
+                }                ui.same_line(); 
+                flags_changed |= ui.checkbox("N", &mut n);
+                
+                if let Some (hl) = input_box("hl", emulator.cpu.registers.hl()) {
+                    emulator.cpu.registers.set_hl(hl);
+                }                ui.same_line(); 
+                flags_changed |= ui.checkbox("CY", &mut cy);
+        
+                if let Some (sp) = input_box("sp", emulator.cpu.sp) {
+                    emulator.cpu.sp = sp;
+                }                
+                if let Some (pc) = input_box("pc", emulator.cpu.pc) {
+                    emulator.cpu.pc = pc;
+                }                
+                
+                if flags_changed {
+
+                    emulator.cpu.registers.set_flags(z as u8, n as u8, h as u8, cy as u8);
+                }
                 
                 ui.separator();
                 
@@ -88,11 +124,17 @@ impl Panel for RegistersPanel {
                 ui.separator();
                 // LCD Control Registers
 
-                // let mut lcdc = emulator.memory_map.get(0xFF40) as i32;
+                let mut joyp = emulator.memory_map.get_io(Io::JOYP);
 
-                // ui.text("LCDC");
-                // ui.input_int("###11", &mut lcdc).step(0).chars_hexadecimal(true).no_horizontal_scroll(true).build();
+                if ui.input_scalar("JOYP", &mut joyp)
+                .chars_hexadecimal(true)
+                .chars_uppercase(true)
+                .display_format("%02x")
+                .build() {
+                    emulator.memory_map.set_io(Io::JOYP, joyp);
+                }
 
+                
             });
     }
 }
