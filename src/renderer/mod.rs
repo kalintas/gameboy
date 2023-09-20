@@ -69,7 +69,7 @@ impl Renderer {
         // imgui.style_mut().scrollbar_rounding = 2.0;
         // imgui.style_mut().grab_min_size = 5.0;
         // imgui.style_mut().grab_rounding = 3.0;
-     
+
         // imgui.style_mut().colors[StyleColor::Text as usize] = [0.80, 0.80, 0.83, 1.00];
         // imgui.style_mut().colors[StyleColor::TextDisabled as usize] = [0.24, 0.23, 0.29, 1.00];
         // imgui.style_mut().colors[StyleColor::WindowBg as usize] = [0.06, 0.05, 0.07, 1.00];

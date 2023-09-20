@@ -1,36 +1,28 @@
-
 use strum::IntoEnumIterator;
 
 use crate::emulator::memory_map::Io;
 
 use super::Panel;
 
-
 pub struct IoMap {
     opened: bool,
 }
 
 impl IoMap {
-
     pub fn new() -> Self {
-        Self {
-            opened: false,
-        }
+        Self { opened: false }
     }
 }
 
 impl Panel for IoMap {
-
     fn update(&mut self, _: &crate::emulator::Emulator, _: &[(usize, u8)]) {}
 
     fn render(&mut self, ui: &imgui::Ui, emulator: &mut crate::emulator::Emulator, _: f32, _: f32) {
-
         if !self.opened {
             return;
         }
 
         let mut register_slider = |io| {
-            
             let mut register = emulator.memory_map.get_io(io);
 
             ui.set_next_item_width(50.0);
@@ -41,22 +33,29 @@ impl Panel for IoMap {
                 // SAFETY:
                 // Provided io.as_ref() string is bound to be ascii string.
                 // "io.as_ref().len() <= 5" is always true.
-                
-                std::ptr::copy_nonoverlapping(io.as_ref().as_bytes().as_ptr(), empty.as_mut_ptr(), io.as_ref().len());
-                
+
+                std::ptr::copy_nonoverlapping(
+                    io.as_ref().as_bytes().as_ptr(),
+                    empty.as_mut_ptr(),
+                    io.as_ref().len(),
+                );
+
                 std::str::from_utf8_unchecked(&empty)
             };
 
-            if ui.input_scalar(name, &mut register)
+            if ui
+                .input_scalar(name, &mut register)
                 .chars_hexadecimal(true)
                 .chars_uppercase(true)
-                .display_format("%02x").build() {
-
+                .display_format("%02x")
+                .build()
+            {
                 emulator.memory_map.set_io(io, register);
             }
         };
 
-        self.opened = ui.window(self.get_name())
+        self.opened = ui
+            .window(self.get_name())
             .opened(&mut self.opened)
             .resizable(false)
             .collapsible(true)
@@ -69,10 +68,8 @@ impl Panel for IoMap {
                 }
 
                 let mut i = 0;
-                
-                Io::iter()
-                .for_each(|io| {
-                    
+
+                Io::iter().for_each(|io| {
                     if i % 5 != 0 {
                         ui.same_line();
                     }
@@ -82,7 +79,8 @@ impl Panel for IoMap {
                 });
 
                 true
-            }).unwrap_or(true);          
+            })
+            .unwrap_or(true);
     }
 
     fn is_opened(&self) -> bool {

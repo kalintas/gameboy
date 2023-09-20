@@ -14,7 +14,7 @@ Memory map of the gameboy(from pandocs: http://bgb.bircd.org/pandocs.htm):
     FFFF        Interrupt Enable Register
 */
 use std::path::Path;
-use strum_macros::{EnumIter, AsRefStr};
+use strum_macros::{AsRefStr, EnumIter};
 
 #[repr(u16)]
 #[allow(dead_code)]
@@ -28,7 +28,7 @@ pub enum Io {
     LYC = 0xFF45,   // LY Compare (R/W)
     WY = 0xFF4A,    // Window Y Position (R/W)
     WX = 0xFF4B,    // Window X Position minus 7 (R/W)
-    BGP = 0xFF47,   // BG Palette Data (R/W) - Non CGB Mode Only 
+    BGP = 0xFF47,   // BG Palette Data (R/W) - Non CGB Mode Only
     OBP0 = 0xFF48,  // Object Palette 0 Data (R/W) - Non CGB Mode Only
     OBP1 = 0xFF49,  // Object Palette 1 Data (R/W) - Non CGB Mode Only
     BGPI = 0xFF68,  // CGB Mode Only - Background Palette Index
@@ -108,7 +108,7 @@ impl MemoryMap {
 
     pub fn after_boot() -> Self {
         let mut memory = Self::new();
-        
+
         memory.set_io(Io::TIMA, 0x00);
         memory.set_io(Io::TMA, 0x00);
         memory.set_io(Io::TAC, 0x00);
@@ -158,12 +158,11 @@ impl MemoryMap {
     }
 
     // TODO:
-    //  When the display is disabled, both VRAM and OAM are accessable at any time. 
-    // The downside is that the screen is blank (white) during this period, 
+    //  When the display is disabled, both VRAM and OAM are accessable at any time.
+    // The downside is that the screen is blank (white) during this period,
     // so that disabling the display would be recommended only during initialization.
 
     pub fn set(&mut self, address: u16, mut value: u8) {
-        
         let address = address as usize;
 
         self.changes.push((address, value));
@@ -177,10 +176,9 @@ impl MemoryMap {
 
             // TODO: currently LCD doesnt work if this is not commented.
             // if self.get_io(Io::STAT) & 0x3 != 0x3 {
-                // Ppu is not in pixel transfer mode.
-                self.vrams[0][address - 0x8000] = value;
+            // Ppu is not in pixel transfer mode.
+            self.vrams[0][address - 0x8000] = value;
             // }
-
         } else if address < 0xC000 {
             // A000-BFFF   8KB External RAM
             self.external_ram[address - 0xA000] = value;
@@ -200,7 +198,6 @@ impl MemoryMap {
                 // Ppu is not in pixel transfer or OAM search mode.
                 self.oam[address - 0xFE00] = value;
             }
-
         } else if address < 0xFF00 {
             // FEA0-FEFF   Not Usable
             // panic!("Tried to write a non usable memory block");
@@ -225,7 +222,7 @@ impl MemoryMap {
         } else {
             self.ier = value;
         }
-    }   
+    }
 
     pub fn get(&self, address: u16) -> u8 {
         let address = address as usize;
@@ -239,7 +236,6 @@ impl MemoryMap {
             return self.rom_banks[1][address - 0x4000];
         }
         if address < 0xA000 {
-
             if self.get_io(Io::STAT) & 0x3 == 0x3 {
                 // Ppu is in pixel transfer mode.
                 return 0xFF;
@@ -265,7 +261,7 @@ impl MemoryMap {
         }
         if address < 0xFEA0 {
             // FE00-FE9F   Sprite Attribute Table (OAM)
-            
+
             if self.get_io(Io::STAT) & 0x2 != 0 {
                 // Ppu is in pixel transfer or OAM search mode.
                 return 0xFF;
@@ -300,7 +296,6 @@ impl MemoryMap {
     }
 
     pub fn set_u16(&mut self, address: u16, value: u16) {
-
         let lsb = (value & 0xFF) as u8; // Get the least significant byte
         let msb = ((value >> 8) & 0xFF) as u8; // Get the most significant byte
 
@@ -312,10 +307,10 @@ impl MemoryMap {
         self.set(address as u16, value)
     }
 
-    // DIV register is a special I/O port that only cpu can write. 
+    // DIV register is a special I/O port that only cpu can write.
     // When programmer tries to write to this register it automatically set to 0.
     pub fn increment_div(&mut self) {
-        self.io_ports[Io::DIV as usize - 0xFF00] = self.io_ports[Io::DIV as usize - 0xFF00].wrapping_add(1);
+        self.io_ports[Io::DIV as usize - 0xFF00] =
+            self.io_ports[Io::DIV as usize - 0xFF00].wrapping_add(1);
     }
-
 }

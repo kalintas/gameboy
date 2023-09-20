@@ -1,14 +1,14 @@
 pub mod cpu;
 mod instructions;
 pub mod memory_map;
-mod registers;
 pub mod ppu;
+mod registers;
 
 use std::path::Path;
 
 use cpu::Cpu;
-use ppu::Ppu;
 use memory_map::MemoryMap;
+use ppu::Ppu;
 
 use self::memory_map::Io;
 
@@ -24,7 +24,7 @@ pub struct JoypadKeys(u8);
 
 impl JoypadKeys {
     pub const NONE: Self = Self(0x0);
-    
+
     pub const BUTTONA: Self = Self(0x1);
     pub const BUTTONB: Self = Self(0x2);
     pub const SELECT: Self = Self(0x4);
@@ -37,7 +37,6 @@ impl JoypadKeys {
 }
 
 impl BitOr for JoypadKeys {
-    
     type Output = Self;
     fn bitor(self, rhs: Self) -> Self::Output {
         Self { 0: self.0 | rhs.0 }
@@ -45,7 +44,6 @@ impl BitOr for JoypadKeys {
 }
 
 impl AsRef<str> for JoypadKeys {
-    
     fn as_ref(&self) -> &str {
         match *self {
             Self::BUTTONA => "Button A",
@@ -56,8 +54,8 @@ impl AsRef<str> for JoypadKeys {
             Self::LEFT => "Left",
             Self::UP => "Up",
             Self::DOWN => "Down",
-            _ => "", 
-        }    
+            _ => "",
+        }
     }
 }
 
@@ -72,7 +70,6 @@ pub struct Emulator {
 }
 
 impl Emulator {
-    
     #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
@@ -81,7 +78,7 @@ impl Emulator {
             memory_map: MemoryMap::new(),
 
             base_clock: 0,
-            joypad_keys: JoypadKeys::NONE
+            joypad_keys: JoypadKeys::NONE,
         }
     }
 
@@ -92,7 +89,7 @@ impl Emulator {
             memory_map: MemoryMap::after_boot(),
 
             base_clock: 0,
-            joypad_keys: JoypadKeys::NONE
+            joypad_keys: JoypadKeys::NONE,
         }
     }
 
@@ -101,34 +98,32 @@ impl Emulator {
     }
 
     fn increment_tima(&mut self) {
-
         let tac = self.memory_map.get_io(Io::TAC);
 
         // Check if the timer is stopped.
         if tac & 0x4 != 0 {
-    
             // Calculate the new timer value.
             let tima = self.memory_map.get_io(Io::TIMA);
 
             if tima < 0xFF {
-
                 self.memory_map.set_io(Io::TIMA, tima + 1);
             } else {
                 /*
                     Note:
-                    If a TMA write is executed on the same cycle as the content of TMA is transferred to TIMA due to a timer overflow, 
+                    If a TMA write is executed on the same cycle as the content of TMA is transferred to TIMA due to a timer overflow,
                     the old value is transferred to TIMA.
                 */
 
                 // TIMA overflow occured. Set the TIMA register to TMA and request a Timer interrupt.
-                self.memory_map.set_io(Io::TIMA, self.memory_map.get_io(Io::TMA));
-                self.memory_map.set_io(Io::IF, self.memory_map.get_io(Io::IF) | 0x4);
+                self.memory_map
+                    .set_io(Io::TIMA, self.memory_map.get_io(Io::TMA));
+                self.memory_map
+                    .set_io(Io::IF, self.memory_map.get_io(Io::IF) | 0x4);
             }
         }
-    }   
+    }
 
     pub fn cycle(&mut self, elapsed_time: f32, on_change: Option<impl Fn(u16) -> bool>) {
-
         // Handle timers.
         /*
             FF07 - TAC - Timer Control (R/W)
@@ -137,7 +132,7 @@ impl Emulator {
                 00:   4096 Hz    (~4194 Hz SGB)
                 01: 262144 Hz  (~268400 Hz SGB)
                 10:  65536 Hz   (~67110 Hz SGB)
-                11:  16384 Hz   (~16780 Hz SGB) 
+                11:  16384 Hz   (~16780 Hz SGB)
         */
 
         let tac = self.memory_map.get_io(Io::TAC);
@@ -146,7 +141,7 @@ impl Emulator {
             1 => 262144,
             2 => 65536,
             3 => 16384,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         let base_clock_cycles = (CPU_CLOCK_RATE as f32 * elapsed_time) as u32;
@@ -158,11 +153,9 @@ impl Emulator {
         let start_cpu_clock_cycles = self.cpu.clock_cycles;
 
         while self.base_clock - start_base_clock < base_clock_cycles {
-
             self.update_joypad();
 
             if self.base_clock % (CPU_CLOCK_RATE / timer_clock) == 0 {
-
                 self.increment_tima();
             }
 
@@ -170,7 +163,8 @@ impl Emulator {
                 self.memory_map.increment_div();
             }
 
-            if self.base_clock % (CPU_CLOCK_RATE / PPU_CLOCK_RATE) == 0 { // TODO: Remove?
+            if self.base_clock % (CPU_CLOCK_RATE / PPU_CLOCK_RATE) == 0 {
+                // TODO: Remove?
                 self.ppu.cycle(&mut self.memory_map);
             }
 
@@ -192,7 +186,6 @@ impl Emulator {
 
     // TODO: TIMA and DIV timers are not updated.
     pub fn cycle_once(&mut self) {
-
         self.cpu.cycle(&mut self.memory_map);
         self.ppu.cycle(&mut self.memory_map);
     }
@@ -202,7 +195,6 @@ impl Emulator {
     }
 
     pub fn update_joypad(&mut self) {
-
         let joyp = self.memory_map.get_io(Io::JOYP);
 
         let keys = if joyp & 0x30 == 0x30 {

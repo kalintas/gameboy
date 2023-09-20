@@ -4,11 +4,11 @@ use imgui::StyleColor;
 
 use crate::emulator::{cpu::Cpu, Emulator};
 
-use super::{Panel, GoToLinePopup};
+use super::{GoToLinePopup, Panel};
 
 // BIG TODO:
 // Disassembly could end up wrong in some cases.
-// Do we need to store all Strings? 
+// Do we need to store all Strings?
 // Find a way to create the display on the fly. -> This will solve all updating costs and will make it real-time updatable
 // Currently it works but this update is required immediately.
 
@@ -35,7 +35,6 @@ pub struct DebuggerPanel {
 }
 
 impl DebuggerPanel {
-
     pub fn new() -> Self {
         let mut strings = Vec::with_capacity(10000);
 
@@ -60,48 +59,41 @@ impl DebuggerPanel {
     }
 
     pub fn cycle(&mut self, emulator: &mut Emulator) {
-
         if self.toggled_breakpoint.is_none() {
-
             let breakpoint = self
                 .breakpoints
                 .iter()
                 .position(|point| point.pointer == emulator.cpu.pc);
 
             if let Some(breakpoint_index) = breakpoint {
-
                 self.toggle_breakpoint(self.breakpoints[breakpoint_index]);
             }
         }
-        
-        if self.toggled_breakpoint.is_none() {
 
+        if self.toggled_breakpoint.is_none() {
             let now = Instant::now();
             let elapsed_time = (now - self.clock_timer).as_secs_f32();
 
-            emulator.cycle(elapsed_time, Some(|pc| {
-
-                self
-                .breakpoints
-                .iter()
-                .any(|point| point.pointer == pc) 
-            }));
+            emulator.cycle(
+                elapsed_time,
+                Some(|pc| self.breakpoints.iter().any(|point| point.pointer == pc)),
+            );
 
             self.clock_timer = now;
-
         } else if self.runinng_next_line {
-
             emulator.cycle_once();
 
             self.pause(&emulator);
-            
+
             self.runinng_next_line = false;
         }
     }
 
     pub fn toggle_breakpoint(&mut self, new_breakpoint: Breakpoint) {
-
-        if self.continued_breakpoint.is_some_and(|last_breakpoint| last_breakpoint.pointer == new_breakpoint.pointer) {
+        if self
+            .continued_breakpoint
+            .is_some_and(|last_breakpoint| last_breakpoint.pointer == new_breakpoint.pointer)
+        {
             self.continued_breakpoint = None;
             return;
         }
@@ -111,31 +103,30 @@ impl DebuggerPanel {
 
     pub fn continue_execution(&mut self) {
         // Save the last breakpoint to make sure to not hit the same breakpoint after continue.
-        self.continued_breakpoint = self.toggled_breakpoint; 
+        self.continued_breakpoint = self.toggled_breakpoint;
         self.toggled_breakpoint = None;
         self.clock_timer = Instant::now();
     }
 
     pub fn run_to_next_line(&mut self) {
-
         if self.toggled_breakpoint.is_some() {
             self.runinng_next_line = true;
         }
     }
 
     pub fn pause(&mut self, emulator: &Emulator) {
+        self.toggled_breakpoint = Some(Breakpoint {
+            row: self.get_pc_row(emulator),
+            pointer: emulator.cpu.pc,
+        });
 
-        self.toggled_breakpoint = Some(Breakpoint { row: self.get_pc_row(emulator), pointer: emulator.cpu.pc });
-        
         if self.update_required {
-
             self.update_strings(emulator);
             self.update_required = false;
         }
     }
 
     fn get_pc_row(&self, emulator: &Emulator) -> i32 {
-
         let mut row = 0;
 
         let mut pointer: u16 = 0;
@@ -149,7 +140,6 @@ impl DebuggerPanel {
     }
 
     fn update_strings(&mut self, emulator: &Emulator) {
-        
         self.strings.clear();
 
         let mut index: usize = 0;
@@ -169,16 +159,14 @@ impl DebuggerPanel {
                 } else {
                     line = format!("{}   ", line);
                 }
-            }   
-            
+            }
+
             let mut instruction_name = instruction.name.to_string();
 
             let mut replace_signature = |signature: &'static str, bytes: usize| {
-                
                 if instruction.name.contains(signature) {
-
                     // // Instrcutions with relavite data format
-                    // if instruction_name.starts_with("ADD SP") || 
+                    // if instruction_name.starts_with("ADD SP") ||
                     // instruction_name.starts_with("JR") ||
                     // instruction_name.starts_with("LD HL,SP") {
 
@@ -187,11 +175,16 @@ impl DebuggerPanel {
                     let mut data: u16 = 0;
 
                     for i in 0..bytes {
-
-                        data = (data << 8) | emulator.memory_map.get((index + (instruction.length as usize) - i - 1) as u16) as u16;
+                        data = (data << 8)
+                            | emulator
+                                .memory_map
+                                .get((index + (instruction.length as usize) - i - 1) as u16)
+                                as u16;
                     }
-                    
-                    instruction_name = instruction.name.replace(signature, format!("0x{:02X}", data).as_str());
+
+                    instruction_name = instruction
+                        .name
+                        .replace(signature, format!("0x{:02X}", data).as_str());
 
                     true
                 } else {
@@ -199,12 +192,11 @@ impl DebuggerPanel {
                 }
             };
 
-            let _ = 
-                replace_signature("d16", 2) ||
-                replace_signature("a16", 2) ||
-                replace_signature("r8", 1) ||
-                replace_signature("d8", 1) ||
-                replace_signature("a8", 1);
+            let _ = replace_signature("d16", 2)
+                || replace_signature("a16", 2)
+                || replace_signature("r8", 1)
+                || replace_signature("d8", 1)
+                || replace_signature("a8", 1);
 
             self.strings
                 .push(format!("{}       {}", line, instruction_name));
@@ -212,19 +204,16 @@ impl DebuggerPanel {
             index += instruction.length as usize;
         }
     }
-
 }
 
 impl Panel for DebuggerPanel {
     fn update(&mut self, emulator: &Emulator, changes: &[(usize, u8)]) {
-
         // TODO: make this work in realtime.
 
-        // Debugger panel only updated when the debugger is paused. 
+        // Debugger panel only updated when the debugger is paused.
         // This is done because updating the panel is very expensive.
 
         if !changes.is_empty() {
-
             if self.toggled_breakpoint.is_some() {
                 self.update_strings(emulator);
             } else {
@@ -299,51 +288,54 @@ impl Panel for DebuggerPanel {
                             ui.text("Go to PC");
                         })
                     }
-                    
+
                     // // Clear breakpoints button
                     // ui.same_line();
                     // if ui.button("Clear all breakpoints") {
                     //     self.breakpoints = Vec::new();
                     // }
-
                 });
 
                 if let Some(breakpoint) = self.toggled_breakpoint {
-
-                    if self.old_toggled_breakpoint.map_or(true, |old_breakpoint: Breakpoint| breakpoint.row != old_breakpoint.row) {
-
+                    if self
+                        .old_toggled_breakpoint
+                        .map_or(true, |old_breakpoint: Breakpoint| {
+                            breakpoint.row != old_breakpoint.row
+                        })
+                    {
                         scroll_to_row(breakpoint.row);
                         self.old_toggled_breakpoint = self.toggled_breakpoint;
                     }
                 }
 
                 // Go to line popup
-                self.go_to_line_popup
-                    .render(ui,
+                self.go_to_line_popup.render(
+                    ui,
                     |scroll| {
-
                         let line = (self.strings.len() as f32 * scroll) as u32;
                         let mut pointer = 0;
 
                         for _ in 0..line {
-                            pointer += Cpu::decode(pointer as _, &emulator.memory_map).length as u32;
-                        }   
+                            pointer +=
+                                Cpu::decode(pointer as _, &emulator.memory_map).length as u32;
+                        }
 
                         pointer
                     },
                     |pointer| {
-
                         let mut line = 0;
                         let mut current_pointer = 0;
 
-                        while current_pointer < pointer  {
-
-                            current_pointer += Cpu::decode(current_pointer as _, &emulator.memory_map).length as u32;
+                        while current_pointer < pointer {
+                            current_pointer +=
+                                Cpu::decode(current_pointer as _, &emulator.memory_map).length
+                                    as u32;
                             line += 1;
-                        }   
+                        }
 
                         line as f32 / self.strings.len() as f32
-                    });
+                    },
+                );
 
                 // Use a list clipper for efficient rendering.
                 // This will only render visible lines of the text.
@@ -361,11 +353,16 @@ impl Panel for DebuggerPanel {
                     if breakpoint.is_some() {
                         text_color =
                             Some(ui.push_style_color(StyleColor::Text, [1.0, 0.0, 0.0, 1.0]));
-                    } 
+                    }
 
-                    if ui.selectable_config(&self.strings[current_row as usize])
-                        .selected(self.toggled_breakpoint.is_some_and(|breakpoint| breakpoint.row == current_row))
-                        .build() {
+                    if ui
+                        .selectable_config(&self.strings[current_row as usize])
+                        .selected(
+                            self.toggled_breakpoint
+                                .is_some_and(|breakpoint| breakpoint.row == current_row),
+                        )
+                        .build()
+                    {
                         if let Some(breakpoint_index) = breakpoint {
                             self.breakpoints.remove(breakpoint_index);
                         } else {
