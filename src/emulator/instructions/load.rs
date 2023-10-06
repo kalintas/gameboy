@@ -335,7 +335,7 @@ pub fn ld_c_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 4 <br>
 ///  Flags affected: - - - -
 pub fn ld_c_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(0xFF00 + cpu.registers.c as u16, cpu.registers.a);
+    cpu.registers.c = cpu.registers.a;
     4
 }
 
@@ -704,7 +704,7 @@ pub fn ld_a_b(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 4 <br>
 ///  Flags affected: - - - -
 pub fn ld_a_c(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.a = memory_map.get(0xFF00 + cpu.registers.c as u16);
+    cpu.registers.a = cpu.registers.c;
     4
 }
 

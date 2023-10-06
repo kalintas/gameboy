@@ -1,21 +1,23 @@
+use std::collections::HashMap;
+
 use strum::IntoEnumIterator;
 
 use crate::emulator::memory_map::Io;
 
 use super::Panel;
 
-pub struct IoMap {
+pub struct IoMapPanel {
     opened: bool,
 }
 
-impl IoMap {
+impl IoMapPanel {
     pub fn new() -> Self {
         Self { opened: false }
     }
 }
 
-impl Panel for IoMap {
-    fn update(&mut self, _: &crate::emulator::Emulator, _: &[(usize, u8)]) {}
+impl Panel for IoMapPanel {
+    fn update(&mut self, _: &crate::emulator::Emulator, _: &HashMap<u16, u8>) {}
 
     fn render(&mut self, ui: &imgui::Ui, emulator: &mut crate::emulator::Emulator, _: f32, _: f32) {
         if !self.opened {
@@ -54,7 +56,7 @@ impl Panel for IoMap {
             }
         };
 
-        self.opened = ui
+        self.opened &= ui
             .window(self.get_name())
             .opened(&mut self.opened)
             .resizable(false)

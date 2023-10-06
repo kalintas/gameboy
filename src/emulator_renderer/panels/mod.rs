@@ -4,12 +4,16 @@ pub mod keyboard_map;
 pub mod memory;
 pub mod registers;
 
+use std::collections::HashMap;
+
 use imgui::Ui;
 
 use crate::emulator::Emulator;
 
+use self::{debugger::DebuggerPanel, memory::MemoryPanel, registers::RegistersPanel, keyboard_map::KeyboardMapPanel, io_map::IoMapPanel};
+
 pub trait Panel {
-    fn update(&mut self, emulator: &Emulator, changes: &[(usize, u8)]);
+    fn update(&mut self, emulator: &Emulator, changes: &HashMap<u16, u8>);
 
     fn render(&mut self, ui: &Ui, emulator: &mut Emulator, width: f32, height: f32);
 
@@ -23,6 +27,42 @@ pub trait Panel {
         unimplemented!();
     }
 }
+
+pub struct Panels {
+
+    pub debugger: DebuggerPanel,
+    pub memory: MemoryPanel,
+    pub registers: RegistersPanel,
+
+    pub keyboard_map: KeyboardMapPanel,
+    pub io_map: IoMapPanel,
+}
+
+impl Panels {
+
+    pub fn new() -> Self {
+        Self {
+            debugger: DebuggerPanel::new(),
+            memory: MemoryPanel::new(),
+            registers: RegistersPanel::new(),
+        
+            keyboard_map: KeyboardMapPanel::new(),
+            io_map: IoMapPanel::new(),
+        }
+    }
+}
+
+macro_rules! call_all_panels {
+    ($panels:expr, $function:ident, $($arguments:expr),*) => {
+        $panels.debugger.$function($($arguments,)*);
+        $panels.memory.$function($($arguments,)*);
+        $panels.registers.$function($($arguments,)*);
+        $panels.keyboard_map.$function($($arguments,)*);
+        $panels.io_map.$function($($arguments,)*);
+    };  
+}
+
+pub(crate) use call_all_panels;
 
 pub struct GoToLinePopup {
     name: &'static str,
@@ -100,3 +140,4 @@ impl GoToLinePopup {
         }
     }
 }
+

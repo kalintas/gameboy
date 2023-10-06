@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::{time::Instant, fs::File, io::{BufWriter, Write}, collections::HashMap};
 
 use imgui::StyleColor;
 
@@ -126,6 +126,14 @@ impl DebuggerPanel {
         }
     }
 
+    pub fn dump_strings(&self) {
+
+        let file = File::create("c:/Users/kerem/Desktop/disassembly_dump.txt").unwrap();
+        let mut file = BufWriter::new(file);
+
+        self.strings.iter().for_each(|string| write!(file, "{}\n", string).unwrap());
+    }
+
     fn get_pc_row(&self, emulator: &Emulator) -> i32 {
         let mut row = 0;
 
@@ -207,7 +215,7 @@ impl DebuggerPanel {
 }
 
 impl Panel for DebuggerPanel {
-    fn update(&mut self, emulator: &Emulator, changes: &[(usize, u8)]) {
+    fn update(&mut self, emulator: &Emulator, changes: &HashMap<u16, u8>) {
         // TODO: make this work in realtime.
 
         // Debugger panel only updated when the debugger is paused.
@@ -254,7 +262,7 @@ impl Panel for DebuggerPanel {
                     // Run to next line button
                     ui.same_line();
                     if ui.arrow_button("##2", imgui::Direction::Down)
-                        || ui.is_key_pressed_no_repeat(imgui::Key::F10)
+                        || ui.is_key_pressed(imgui::Key::F10)
                     {
                         self.run_to_next_line();
                     }

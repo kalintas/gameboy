@@ -66,6 +66,8 @@ pub struct Emulator {
     pub memory_map: MemoryMap,
 
     base_clock: u32,
+    dma_transfer_start: Option<u32>,
+
     joypad_keys: JoypadKeys,
 }
 
@@ -75,9 +77,12 @@ impl Emulator {
         Self {
             cpu: Cpu::new(),
             ppu: Ppu::new(),
+
             memory_map: MemoryMap::new(),
 
             base_clock: 0,
+            dma_transfer_start: None,
+
             joypad_keys: JoypadKeys::NONE,
         }
     }
@@ -86,9 +91,12 @@ impl Emulator {
         Self {
             cpu: Cpu::after_boot(),
             ppu: Ppu::new(),
+
             memory_map: MemoryMap::after_boot(),
 
             base_clock: 0,
+            dma_transfer_start: None,
+
             joypad_keys: JoypadKeys::NONE,
         }
     }
@@ -123,7 +131,9 @@ impl Emulator {
         }
     }
 
-    pub fn cycle(&mut self, elapsed_time: f32, on_change: Option<impl Fn(u16) -> bool>) {
+    /// Parameter base_clock_cycles represents how much base cycles this function will take.
+    /// Function tries to do a complete emulation such as running Cpu, Ppu and counting timers such as DIV and TIMA.
+    fn cycle_impl<T: Fn(u16) -> bool>(&mut self, base_clock_cycles: u32, on_change: Option<T>) {
         // Handle timers.
         /*
             FF07 - TAC - Timer Control (R/W)
@@ -143,8 +153,6 @@ impl Emulator {
             3 => 16384,
             _ => unreachable!(),
         };
-
-        let base_clock_cycles = (CPU_CLOCK_RATE as f32 * elapsed_time) as u32;
 
         self.base_clock = self.base_clock % CPU_CLOCK_RATE;
         self.ppu.clock_cycles = self.ppu.clock_cycles % (114 * 154);
@@ -170,8 +178,34 @@ impl Emulator {
 
             // We check each time if the cpu clock is lower than base clock.
             // This is done because Cpu instructions have different instruction latencies.
-            if self.cpu.clock_cycles - start_cpu_clock_cycles < self.base_clock - start_base_clock {
+            if self.cpu.clock_cycles - start_cpu_clock_cycles <= self.base_clock - start_base_clock {
+                
+                // Check if the DMA transfer is over.
+                if let Some(dma_start) = self.dma_transfer_start {
+                    
+                    let diff = if dma_start > self.base_clock {
+                        CPU_CLOCK_RATE + self.base_clock - dma_start
+                    } else {
+                        self.base_clock - dma_start
+                    };
+                    
+                    if diff >= 640 {
+                        self.dma_transfer_start = None;
+                        self.memory_map.on_dma_transfer = false;
+                    } else {
+                        // Set DMA transfer true for restricting CPU memory access. 
+                        self.memory_map.on_dma_transfer = true;
+                    }
+                }
+
                 self.cpu.cycle(&mut self.memory_map);
+                
+                // Check if the DMA transfer is started.
+                if self.memory_map.on_dma_transfer && self.dma_transfer_start.is_none() {
+                    self.dma_transfer_start = Some(self.base_clock);
+                }
+                // Reset DMA transfer so PPU can access memory.
+                self.memory_map.on_dma_transfer = false;
 
                 if let Some(func) = &on_change {
                     if func(self.cpu.pc) {
@@ -184,10 +218,19 @@ impl Emulator {
         }
     }
 
-    // TODO: TIMA and DIV timers are not updated.
+
+    pub fn cycle<T: Fn(u16) -> bool>(&mut self, elapsed_time: f32, on_change: Option<T>) {
+        
+        let base_clock_cycles = (CPU_CLOCK_RATE as f32 * elapsed_time) as u32;
+    
+        self.cycle_impl(base_clock_cycles, on_change)
+    }
+
     pub fn cycle_once(&mut self) {
-        self.cpu.cycle(&mut self.memory_map);
-        self.ppu.cycle(&mut self.memory_map);
+        // Call the implementation function with the base clock's step cycle count.
+        // This way emulator exactly does the smallest unit of emulation.
+        // Rust requires a type to be passed on. So we pass a dummy function pointer. 
+        self.cycle_impl::<fn (u16) -> bool>(4, None) 
     }
 
     pub fn update_joypad_keys(&mut self, keys: JoypadKeys) {
@@ -198,6 +241,7 @@ impl Emulator {
         let joyp = self.memory_map.get_io(Io::JOYP);
 
         let keys = if joyp & 0x30 == 0x30 {
+            // Reset joypad.
             self.memory_map.set_io(Io::JOYP, 0xFF);
             return;
         } else if joyp & 0x10 != 0 {
@@ -209,14 +253,12 @@ impl Emulator {
         } else {
             return;
         };
-
-        self.memory_map.set_io(Io::JOYP, joyp | keys);
+        
+        self.memory_map.set_io(Io::JOYP, (joyp & 0xF0) | keys);
 
         // Handle interrupt
-        // let new_joyp = self.memory_map.get_io(Io::JOYP);
-
-        // if joyp != new_joyp {
-        //     self.memory_map.set_io(Io::IF, self.memory_map.get_io(Io::IF) | 0x8);
-        // }
+        if keys != 0xF  {
+            self.memory_map.set_io(Io::IF, self.memory_map.get_io(Io::IF) | 0x10);
+        }
     }
 }

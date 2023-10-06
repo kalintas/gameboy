@@ -10,6 +10,8 @@ imgui-sdl2-support  = { git = "https://github.com/imgui-rs/imgui-rs" }
 imgui-glow-renderer  = { git = "https://github.com/imgui-rs/imgui-rs" }
 strum = "0.25"
 strum_macros = "0.25"
+rfd = "0.12.0"
+arrayvec = "0.7.4"
 
 [dependencies.sdl2]
 version = "0.34.5"

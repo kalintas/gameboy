@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::emulator::{
     memory_map::{self, Io},
     Emulator,
@@ -14,7 +16,7 @@ impl RegistersPanel {
 }
 
 impl Panel for RegistersPanel {
-    fn update(&mut self, _: &Emulator, _: &[(usize, u8)]) {}
+    fn update(&mut self, _: &Emulator, _: &HashMap<u16, u8>) {}
 
     fn render(&mut self, ui: &imgui::Ui, emulator: &mut Emulator, width: f32, height: f32) {
         ui.window("Registers")

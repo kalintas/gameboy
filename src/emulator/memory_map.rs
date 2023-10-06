@@ -13,7 +13,7 @@ Memory map of the gameboy(from pandocs: http://bgb.bircd.org/pandocs.htm):
     FF80-FFFE   High RAM (HRAM)
     FFFF        Interrupt Enable Register
 */
-use std::path::Path;
+use std::{path::Path, collections::HashMap, ptr::copy_nonoverlapping};
 use strum_macros::{AsRefStr, EnumIter};
 
 #[repr(u16)]
@@ -87,7 +87,9 @@ pub struct MemoryMap {
     high_ram: [u8; 0x7F],
     ier: u8, // Interrupt Enable Register
 
-    pub changes: Vec<(usize, u8)>,
+    pub changes: HashMap<u16, u8>,
+
+    pub on_dma_transfer: bool,
 }
 
 impl MemoryMap {
@@ -102,7 +104,8 @@ impl MemoryMap {
             high_ram: [0u8; 0x7F],
             ier: 0u8,
 
-            changes: Vec::new(),
+            changes: HashMap::new(),
+            on_dma_transfer: false
         }
     }
 
@@ -147,13 +150,20 @@ impl MemoryMap {
     pub fn load_rom<T: AsRef<Path>>(&mut self, path: T) {
         let rom = std::fs::read(path).unwrap();
 
-        self.rom_banks[0].copy_from_slice(&rom[..0x4000]);
-        self.rom_banks[1].copy_from_slice(&rom[0x4000..0x8000]);
+        unsafe {
+            // TODO: SAFETY
+
+            copy_nonoverlapping(rom.as_ptr(), self.rom_banks[0].as_mut_ptr(), 0x4000.min(rom.len()));
+            
+            if rom.len() > 0x4000 {
+                copy_nonoverlapping(rom.as_ptr().add(0x4000), self.rom_banks[1].as_mut_ptr(), 0x4000.min(rom.len()));
+            }
+        }
 
         self.changes.reserve(rom.len() - self.changes.len());
 
         for i in 0..rom.len() {
-            self.changes.push((i, rom[i]));
+            self.changes.insert(i as u16, rom[i]);
         }
     }
 
@@ -165,7 +175,10 @@ impl MemoryMap {
     pub fn set(&mut self, address: u16, mut value: u8) {
         let address = address as usize;
 
-        self.changes.push((address, value));
+        if self.on_dma_transfer && (address < 0xFF80 || address == 0xFFFF) {
+            // CPU can access only HRAM (memory at FF80-FFFE) during DMA transfer.
+            return;
+        }
 
         if address < 0x8000 {
             // 0000-3FFF   16KB ROM Bank 00
@@ -204,15 +217,13 @@ impl MemoryMap {
         } else if address < 0xFF80 {
             // FF00-FF7F   I/O Ports
 
-            // DIV: Divider register, writing any value to this register resets it to 0x00
             if address == Io::DIV as _ {
+                // DIV: Divider register, writing any value to this register resets it to 0x00
                 value = 0;
             } else if address == Io::DMA as _ {
-                // TODO: DMA transfer.
-            }
-
-            // BIG TODO:
-            if address == Io::LCDC as _ {
+                // DMA: Writing to this register launches a DMA transfer
+                // It takes 640 cpu clock cycles for the DMA transfer to be complete.
+                self.dma_transfer(value);
                 return;
             }
 
@@ -222,10 +233,17 @@ impl MemoryMap {
         } else {
             self.ier = value;
         }
+
+        self.changes.insert(address as u16, value);
     }
 
     pub fn get(&self, address: u16) -> u8 {
         let address = address as usize;
+
+        if self.on_dma_transfer && (address < 0xFF80 || address == 0xFFFF) {
+            // CPU can access only HRAM (memory at FF80-FFFE) during DMA transfer.
+            return 0xFF;
+        }
 
         if address < 0x4000 {
             // 0000-3FFF   16KB ROM Bank 00
@@ -312,5 +330,21 @@ impl MemoryMap {
     pub fn increment_div(&mut self) {
         self.io_ports[Io::DIV as usize - 0xFF00] =
             self.io_ports[Io::DIV as usize - 0xFF00].wrapping_add(1);
+    }
+
+    pub fn dma_transfer(&mut self, source: u8) {
+        
+        // TODO: XX(source) = $00 to $DF
+        if source > 0xDF {
+            return;
+        }
+
+        let source = (source as u16) << 8;
+        
+        for i in 0..0xA0 {
+            self.set(0xFE00 + i, self.get(source + i));
+        }
+        
+        self.on_dma_transfer = true;
     }
 }

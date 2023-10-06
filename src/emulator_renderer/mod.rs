@@ -2,11 +2,7 @@ use std::time::Instant;
 
 use crate::emulator::ppu;
 
-use self::panels::debugger::DebuggerPanel;
-use self::panels::io_map::IoMap;
-use self::panels::keyboard_map::KeyboardMap;
-use self::panels::memory::MemoryPanel;
-use self::panels::registers::RegistersPanel;
+use self::panels::Panels;
 
 use super::emulator::Emulator;
 use super::renderer::{framebuffer::Framebuffer, Renderer};
@@ -14,16 +10,13 @@ use super::renderer::{framebuffer::Framebuffer, Renderer};
 mod panels;
 
 use panels::Panel;
+use rfd::FileDialog;
 use sdl2::keyboard::Scancode;
 
 pub struct EmulatorRenderer {
     running: bool,
 
-    debugger_panel: DebuggerPanel,
-    keyboard_map_panel: KeyboardMap,
-
-    panels: Vec<Box<dyn Panel>>,
-    small_panels: Vec<Box<dyn Panel>>,
+    panels: Panels,
 
     renderer: Renderer,
 }
@@ -33,28 +26,14 @@ impl EmulatorRenderer {
         Self {
             running: true,
 
-            debugger_panel: DebuggerPanel::new(),
-            keyboard_map_panel: KeyboardMap::new(),
-
-            panels: Vec::new(),
-            small_panels: Vec::new(),
+            panels: Panels::new(),
 
             renderer: Renderer::new("Gameboy", 800, 739).unwrap(),
         }
     }
 
-    fn set_default_panels(&mut self) {
-        self.panels = vec![
-            Box::new(MemoryPanel::new()) as Box<dyn Panel>,
-            Box::new(RegistersPanel::new()) as Box<dyn Panel>,
-        ];
-
-        self.small_panels = vec![Box::new(IoMap::new()) as Box<dyn Panel>];
-    }
-
     pub fn render(&mut self, emulator: &mut Emulator) {
-        self.set_default_panels();
-        self.debugger_panel.pause(emulator);
+        self.panels.debugger.pause(emulator);
 
         let framebuffer = Framebuffer::new();
 
@@ -70,11 +49,11 @@ impl EmulatorRenderer {
             }
 
             emulator.update_joypad_keys(
-                self.keyboard_map_panel
+                self.panels.keyboard_map
                     .update_keys(keyboard_state.pressed_scancodes().collect()),
             );
 
-            self.debugger_panel.cycle(emulator);
+            self.panels.debugger.cycle(emulator);
 
             // emulator.cycle();
 
@@ -98,14 +77,7 @@ impl EmulatorRenderer {
                 seconds_timer = now;
             }
 
-            self.panels
-                .iter_mut()
-                .chain(self.small_panels.iter_mut())
-                .for_each(|panel| panel.update(&emulator, &emulator.memory_map.changes));
-            self.debugger_panel
-                .update(&emulator, &emulator.memory_map.changes);
-            self.keyboard_map_panel
-                .update(&emulator, &emulator.memory_map.changes);
+            panels::call_all_panels!(self.panels, update, emulator, &emulator.memory_map.changes);
 
             emulator.memory_map.changes.clear();
 
@@ -132,15 +104,27 @@ impl EmulatorRenderer {
             let width = self.renderer.window_width as f32;
             let height = (self.renderer.window_height - 19) as f32;
 
+            let mut reset_emulator = false;
+
             self.renderer.render(|ui| {
                 ui.main_menu_bar(|| {
                     ui.menu("File", || {
-                        ui.menu_item("Load Cartidage");
+                        
+                        if ui.menu_item("Load Cartidage") {
+                            let file = FileDialog::new().pick_file();
+
+                            if let Some(file_path) = file {
+
+                                *emulator = Emulator::after_boot();
+                                emulator.load_cartidge(file_path);
+                                reset_emulator = true;
+                            } 
+                        }
+
                         if ui.menu_item("Reload Cartidage") {
                             *emulator = Emulator::after_boot();
                             emulator.load_cartidge("./roms/tetris.gb");
-
-                            self.debugger_panel.toggled_breakpoint = None;
+                            reset_emulator = true;
                         }
 
                         if ui.menu_item("Quit") {
@@ -150,7 +134,8 @@ impl EmulatorRenderer {
                     });
 
                     ui.menu("Window", || {
-                        self.small_panels.iter_mut().for_each(|panel| {
+
+                        let small_panel = |panel: &mut dyn Panel| {
                             if ui
                                 .menu_item_config(panel.get_name())
                                 .selected(panel.is_opened())
@@ -158,49 +143,46 @@ impl EmulatorRenderer {
                             {
                                 panel.set_opened(!panel.is_opened());
                             }
-                        });
+                        };
 
-                        if ui
-                            .menu_item_config(self.keyboard_map_panel.get_name())
-                            .selected(self.keyboard_map_panel.is_opened())
-                            .build()
-                        {
-                            self.keyboard_map_panel
-                                .set_opened(!self.keyboard_map_panel.is_opened());
-                        }
+                        small_panel(&mut self.panels.io_map);
+                        small_panel(&mut self.panels.keyboard_map);
                     });
 
                     ui.menu("Debug", || {
                         if ui.menu_item("Continue                F5") {
-                            self.debugger_panel.continue_execution();
+                            self.panels.debugger.continue_execution();
                         }
 
                         if ui.menu_item("Run To Next Line        F10") {
-                            self.debugger_panel.run_to_next_line();
+                            self.panels.debugger.run_to_next_line();
                         }
 
                         if ui.menu_item("Pause                   F6") {
-                            self.debugger_panel.pause(emulator);
+                            self.panels.debugger.pause(emulator);
                         }
 
                         if ui.menu_item("Clear All Breakpoints") {
-                            self.debugger_panel.breakpoints.clear();
+                            self.panels.debugger.breakpoints.clear();
+                        }
+
+                        if ui.menu_item("Dump disassembly") {
+                            self.panels.debugger.dump_strings();
                         }
                     });
 
                     ui.show_metrics_window(&mut true);
                 });
 
-                self.panels
-                    .iter_mut()
-                    .chain(self.small_panels.iter_mut())
-                    .for_each(|panel| panel.render(ui, emulator, width, height));
-
-                self.debugger_panel.render(ui, emulator, width, height);
-                self.keyboard_map_panel.render(ui, emulator, width, height);
+                panels::call_all_panels!(self.panels, render, ui, emulator, width, height);
 
                 // ui.show_demo_window(&mut true);
             });
+
+            if reset_emulator {
+                self.panels = Panels::new();
+                self.panels.debugger.pause(emulator);
+            }
         }
     }
 }

@@ -160,8 +160,39 @@ pub fn dec_h(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 4 <br>
 ///  Flags affected: Z - 0 C
 pub fn daa(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    std::unimplemented!()
-    // 4
+
+    // TODO:
+    /*
+        DAA is intended to be run immediately after an addition or subtraction operation, 
+        where the operands were BCD encoded. 
+        So the result (stored in the A register) is the BCD encoded result of the previous operation.
+    */
+
+    let mut cy = 0;
+
+    if cpu.registers.get_n() == 0 {
+        // Addition
+        if cpu.registers.get_cy() != 0 || cpu.registers.a > 0x99 {
+            cpu.registers.a = cpu.registers.a.wrapping_add(0x60);
+            cy = 1;
+        }
+        if cpu.registers.get_h() != 0 || (cpu.registers.a & 0xF) > 0x9 {
+            cpu.registers.a = cpu.registers.a.wrapping_add(0x6);
+        }
+    } else {
+        // Subtraction
+        if cpu.registers.get_cy() != 0 {
+            cpu.registers.a = cpu.registers.a.wrapping_sub(0x60);
+        }
+
+        if cpu.registers.get_h() != 0 {
+            cpu.registers.a = cpu.registers.a.wrapping_sub(0x6);
+        }
+    }
+
+    cpu.registers.set_flags((cpu.registers.a == 0) as u8, cpu.registers.get_n(), 0, cy);
+
+    4
 }
 
 /// ADD HL,HL - 0x29 <br>

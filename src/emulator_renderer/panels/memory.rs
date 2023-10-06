@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::emulator::Emulator;
 
 use super::{GoToLinePopup, Panel};
@@ -52,8 +54,11 @@ impl MemoryPanel {
 }
 
 impl Panel for MemoryPanel {
-    fn update(&mut self, _: &Emulator, changes: &[(usize, u8)]) {
+    fn update(&mut self, _: &Emulator, changes: &HashMap<u16, u8>) {
         for (address, value) in changes.iter() {
+            
+            let address = *address as usize;
+
             let index = (address / 0x10) * 57 + (address % 0x10) * 2 + 6;
 
             self.string[index] = char::from_digit(((value & 0xF0) >> 4) as _, 16).unwrap() as u8;

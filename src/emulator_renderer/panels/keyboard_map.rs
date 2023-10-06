@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::emulator::JoypadKeys;
 use imgui::Key;
 use sdl2::keyboard::Scancode;
@@ -15,14 +17,14 @@ const DEFAULT_MAP: [(JoypadKeys, Scancode); 8] = [
     (JoypadKeys::UP, Scancode::W),
 ];
 
-pub struct KeyboardMap {
+pub struct KeyboardMapPanel {
     keyboard_map: [(JoypadKeys, Scancode); 8],
     opened: bool,
     pressed_keys: Vec<Scancode>,
     changing_key_index: Option<usize>,
 }
 
-impl KeyboardMap {
+impl KeyboardMapPanel {
     pub fn new() -> Self {
         Self {
             keyboard_map: DEFAULT_MAP,
@@ -56,15 +58,15 @@ impl KeyboardMap {
     }
 }
 
-impl Panel for KeyboardMap {
-    fn update(&mut self, _: &crate::emulator::Emulator, _: &[(usize, u8)]) {}
+impl Panel for KeyboardMapPanel {
+    fn update(&mut self, _: &crate::emulator::Emulator, _: &HashMap<u16, u8>) {}
 
     fn render(&mut self, ui: &imgui::Ui, _: &mut crate::emulator::Emulator, _: f32, _: f32) {
         if !self.opened {
             return;
         }
 
-        self.opened = ui
+        self.opened &= ui
             .window(self.get_name())
             .opened(&mut self.opened)
             .resizable(true)
