@@ -15,7 +15,6 @@ use self::memory_map::Io;
 use std::ops::BitOr;
 
 const CPU_CLOCK_RATE: u32 = 4_194_304;
-const PPU_CLOCK_RATE: u32 = 1_048_576;
 
 const DIV_REGISTER_CLOCK_RATE: u32 = 16_384;
 
@@ -155,7 +154,7 @@ impl Emulator {
         };
 
         self.base_clock = self.base_clock % CPU_CLOCK_RATE;
-        self.ppu.clock_cycles = self.ppu.clock_cycles % (114 * 154);
+        self.ppu.clock_cycles = self.ppu.clock_cycles % ppu::PPU_ONE_FRAME;
 
         let start_base_clock = self.base_clock;
         let start_cpu_clock_cycles = self.cpu.clock_cycles;
@@ -171,10 +170,7 @@ impl Emulator {
                 self.memory_map.increment_div();
             }
 
-            if self.base_clock % (CPU_CLOCK_RATE / PPU_CLOCK_RATE) == 0 {
-                // TODO: Remove?
-                self.ppu.cycle(&mut self.memory_map);
-            }
+            self.ppu.cycle(&mut self.memory_map, (ppu::PPU_CLOCK_RATE * 4) / CPU_CLOCK_RATE);
 
             // We check each time if the cpu clock is lower than base clock.
             // This is done because Cpu instructions have different instruction latencies.

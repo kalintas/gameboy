@@ -325,6 +325,34 @@ impl MemoryMap {
         self.set(address as u16, value)
     }
 
+    pub fn ppu_get_vram(&self, address: u16) -> u8 {
+
+        /*
+            At various times during PPU operation read access to VRAM is blocked and the value read is $FF:
+            LCD turning off
+            At scanline 0 on CGB when not in double speed mode
+            When switching from mode 3 to mode 0
+            On CGB when searching OAM and index 37 is reached
+        */
+
+        let lcdc = self.get_io(Io::LCDC);
+        let stat = self.get_io(Io::STAT);
+
+        if lcdc & 0x80 == 0 {
+            // LCDC off
+            0xFF            
+        } else if stat & 0x3 != 0x3 {
+            // Mode is not 3(pixel transfer)
+            0xFF
+        } else {
+            self.vrams[0][address as usize - 0x8000]
+        }
+    }
+
+    pub fn ppu_get_oam(&self, address: u16) -> u8 {
+        self.oam[address as usize - 0xFE00]
+    }
+
     // DIV register is a special I/O port that only cpu can write.
     // When programmer tries to write to this register it automatically set to 0.
     pub fn increment_div(&mut self) {
