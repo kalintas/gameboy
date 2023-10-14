@@ -66,12 +66,14 @@ impl PixelFifo {
         }
     }
 
-    fn pop(&mut self, memory_map: &MemoryMap) -> u32 {
+    fn pop(&mut self, memory_map: &MemoryMap) -> (u32, u16, u16) {
 
+        // TODO:
         assert!(self.pixel_count >= 0);
 
         let color = self.color_values & 0x3;
         let source = self.pixel_sources & 0x3;
+        let priority = self.background_priority & 0x1;
 
         self.color_values >>= 2;
         self.pixel_sources >>= 2;
@@ -93,14 +95,50 @@ impl PixelFifo {
             COLOR_SHADES[((pallete_index >> 6) & 0x3) as usize], // Black
         ];
 
-        pallete[color as usize]
+        (pallete[color as usize], color as u16, priority)
     }
 
-    fn push(&mut self, tile: u16, source: u32) {
+    fn push(&mut self, tile: u16, source: u32, priority: u16) {
 
-        self.color_values |= (tile as u32) << (self.pixel_count * 2);
-        self.pixel_sources |= source << (self.pixel_count * 2);
-        self.pixel_count += 8;
+        // TODO:
+        match source {
+            Self::OBJECT0_PIXEL | Self::OBJECT1_PIXEL =>  {
+
+                let mut color_values = 0;
+                let mut pixel_sources = 0;
+                let mut background_priority = 0;
+
+                for i in 0..8 {
+                    
+                    let t = i * 2;
+                    
+                    let current_source = (self.pixel_sources >> t) & 0x3;
+                    let current_color = (self.color_values >> t) & 0x3;
+
+                    // TODO: source < current_source is not correct should be source > current_source
+                    // Currently doesnt work properly.
+                    if i >= self.pixel_count || current_color == 0 || source < current_source {
+                        color_values |= (tile as u32) & (0x3 << t);
+                        pixel_sources |= source << t;
+                        background_priority |= priority << i;
+                    } else {
+                        color_values |= current_color << t;
+                        pixel_sources |= current_source << t;
+                        background_priority |= self.background_priority & (0x1 << i);
+                    }
+                }
+
+                self.pixel_count = 8;
+                self.color_values = color_values;
+                self.pixel_sources = pixel_sources;
+                self.background_priority = background_priority;
+            },
+            _ => { 
+                self.color_values |= (tile as u32) << (self.pixel_count * 2);
+                self.pixel_sources |= source << (self.pixel_count * 2);
+                self.pixel_count += 8;
+            }
+        }
     }
 }
 
@@ -117,6 +155,7 @@ struct PixelFetcher {
     pos_x: u16,
 
     fetching_object: Option<Object>,
+    hit_object: bool, // This is must be set to true in case of an sprite hit.
 
     mode: PixelFetcherMode
 }
@@ -133,6 +172,7 @@ impl PixelFetcher {
             pos_x: 0,
 
             fetching_object: None,
+            hit_object: false,
 
             mode: PixelFetcherMode::GetTile
         }
@@ -169,12 +209,19 @@ impl PixelFetcher {
                 // Pass tile_low to next mode
                 
                 let mut tile_map_value = tile_map_value as i32;
-                let tile_y; // Y location of the current tile.
+                let mut tile_y; // Y location of the current tile.
                 let tile_data_start;
 
                 if let Some(object) = self.fetching_object {
-                    
+
                     tile_y = ly as i32 - (object.pos_y as i32 - 16);
+
+                    // TODO:
+                    if object.attributes & 0x40 != 0 {
+                        // Vertical flip
+                        tile_y = 7 - tile_y;
+                    }
+
                     tile_data_start = 0x8000;
                 } else {
                     if lcdc & 0x10 == 0 {
@@ -205,9 +252,17 @@ impl PixelFetcher {
                 // Push 8 pixels to FIFO
                 // Only pushed if fifo is half empty.
                 // If horizontal flip is set just push LSB instead of MSB.
+
+                // In case of an sprite hit PPU must wait until pixel fetcher reaches PixelFetcherMode::Push.
+                // But any tiles fetched in this process will go away and must be computed again.
+                if self.hit_object {
+                    self.hit_object = false;
+                    self.mode = PixelFetcherMode::GetTile;
+                    return 1;
+                }
                 
                 // Wait until fifo is empty if currently fetching background or window tile.
-                if !self.fetching_object.is_some() && fifo.pixel_sources > 8 {
+                if self.fetching_object.is_none() && fifo.pixel_count > 8 {
                     return 1;
                 }
 
@@ -218,8 +273,17 @@ impl PixelFetcher {
                     let pixel = (((tile_high >> i) & 0x1) << 1) | ((tile_low >> i) & 0x1);
                     
                     // TODO:
-                    // tile |= (pixel as u16) << (i * 2); // Horizontal flip
-                    tile |= (pixel as u16) << ((7 - i) * 2);
+                    let horizontal_flip = if let Some(object) = self.fetching_object {
+                        (object.attributes & 0x20) != 0                        
+                    } else {
+                        false
+                    };
+
+                    if horizontal_flip {
+                        tile |= (pixel as u16) << (i * 2); // Horizontal flip
+                    } else {
+                        tile |= (pixel as u16) << ((7 - i) * 2);
+                    }
                 }
 
                 if let Some(object) = self.fetching_object {
@@ -231,9 +295,9 @@ impl PixelFetcher {
                     };
 
                     // Push transparent pixels with lowest priority.
-                    oam_fifo.push(tile, source);
+                    oam_fifo.push(tile, source, (object.attributes >> 7) as u16);
                 } else {
-                    fifo.push(tile, PixelFifo::BACKGROUND_PIXEL);
+                    fifo.push(tile, PixelFifo::BACKGROUND_PIXEL, 0);
                     self.pos_x += 8;
                 }
 
@@ -368,7 +432,6 @@ impl Ppu {
                 fetcher_cycles += self.pixel_fetcher.cycle(memory_map, &mut self.fifo, &mut self.oam_fifo);
             }
 
-            // TODO: is there a way that this approach makes an infinite loop of pixel_transfer mode?
             // Check the last element since the found_objects is sorted in decreasing order.
             if let Some(object) = self.found_objects.last() {
 
@@ -377,6 +440,7 @@ impl Ppu {
 
                     // Wait until the pixel fetcher finishes tile fetching.
                     if self.pixel_fetcher.mode != PixelFetcherMode::GetTile {
+                        self.pixel_fetcher.hit_object = true;
                         continue;
                     }
 
@@ -394,10 +458,14 @@ impl Ppu {
             // Popping the pixel fifo is always 1 dot.
             if self.fifo.pixel_count > 8 {
 
-                let mut color = self.fifo.pop(memory_map);
+                let (mut color, color_index, _) = self.fifo.pop(memory_map);
 
                 if self.oam_fifo.pixel_count > 0 {
-                    color = self.oam_fifo.pop(memory_map);
+                    let (object_color, object_color_index, priority) = self.oam_fifo.pop(memory_map);
+                    
+                    if object_color_index != 0 && (priority == 0 || color_index == 0) {
+                        color = object_color;
+                    }
                 }
 
                 self.screen_buffer[self.pos_x + ly as usize * SCREEN_WIDTH] = color;
@@ -455,6 +523,12 @@ impl Ppu {
                     self.fifo = PixelFifo::new();
                     self.oam_fifo = PixelFifo::new();
                     self.pixel_fetcher = PixelFetcher::new();
+
+                    let scx = memory_map.get_io(Io::SCX);
+                    let scy = memory_map.get_io(Io::SCY);
+
+                    // TODO:
+                    assert!(scx == 0 && scy == 0);
 
                     Mode::PixelTransfer
                 } else {
@@ -515,6 +589,7 @@ impl Ppu {
     }
 
     pub fn cycle(&mut self, memory_map: &mut MemoryMap, dots: u32) {
+        // TODO:
         assert_eq!(dots, 4);
         match self.mode {
             Mode::OamSearch => self.oam_search(memory_map, dots),

@@ -14,6 +14,11 @@ use self::memory_map::Io;
 
 use std::ops::BitOr;
 
+/*
+    TODO:
+    https://gbdev.io/pandocs/Timer_Obscure_Behaviour.html
+*/
+
 const CPU_CLOCK_RATE: u32 = 4_194_304;
 
 const DIV_REGISTER_CLOCK_RATE: u32 = 16_384;
@@ -180,12 +185,13 @@ impl Emulator {
                 if let Some(dma_start) = self.dma_transfer_start {
                     
                     let diff = if dma_start > self.base_clock {
-                        CPU_CLOCK_RATE + self.base_clock - dma_start
+                        (CPU_CLOCK_RATE + self.base_clock) - dma_start
                     } else {
                         self.base_clock - dma_start
                     };
-                    
-                    if diff >= 640 {
+
+                    // TODO: 160?
+                    if diff >= 160 {
                         self.dma_transfer_start = None;
                         self.memory_map.on_dma_transfer = false;
                     } else {

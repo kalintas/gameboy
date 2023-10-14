@@ -27,8 +27,8 @@ pub fn stop_0(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Flags affected: - - - -
 pub fn halt(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     // Power down CPU until an interrupt occurs.
-    unimplemented!();
-    // 4
+    cpu.halt();
+    4
 }
 
 /// PREFIX CB - 0xCB <br>

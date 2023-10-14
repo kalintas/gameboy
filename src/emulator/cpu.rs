@@ -10,6 +10,9 @@ pub struct Cpu {
     pub clock_cycles: u32,
     pub registers: Registers,
     pub ime: bool,
+
+    halt_mode: bool,
+    stop_mode: bool,
 }
 
 impl Cpu {
@@ -20,6 +23,9 @@ impl Cpu {
             clock_cycles: 0,
             registers: Registers::new(),
             ime: false,
+
+            halt_mode: false,
+            stop_mode: false,
         }
     }
 
@@ -30,11 +36,20 @@ impl Cpu {
             clock_cycles: 0,
             registers: Registers::after_boot(),
             ime: false,
+            
+            halt_mode: false,
+            stop_mode: false,
         }
     }
 
     pub fn cycle(&mut self, memory_map: &mut MemoryMap) {
         if self.handle_interrupts(memory_map) {
+            return;
+        }
+
+        // TODO: https://gbdev.io/pandocs/halt.html?highlight=halt#halt-bug
+        // In halt mode CPU is powered down until an interrupt occurs.
+        if self.halt_mode {
             return;
         }
 
@@ -65,7 +80,7 @@ impl Cpu {
         self.clock_cycles = self.clock_cycles.wrapping_add(instruction_cycles);
     }
 
-    fn handle_interrupt(&mut self, memory_map: &MemoryMap) -> Option<(u16, u8)> {
+    fn handle_interrupt(&self, memory_map: &MemoryMap) -> Option<(u16, u8)> {
         /*
             From pandocs:
             Provided that IME and IE allow the execution of more than one of the requested interrupts,
@@ -99,12 +114,17 @@ impl Cpu {
         return None;
     }
 
-    pub fn handle_interrupts(&mut self, memory_map: &mut MemoryMap) -> bool {
-        if !self.ime {
-            return false;
-        }
-
+    fn handle_interrupts(&mut self, memory_map: &mut MemoryMap) -> bool {
+ 
         if let Some((interrupt_address, new_if_reg)) = self.handle_interrupt(&memory_map) {
+
+            // Halt mode is disabled regardless of whether the interrupt is handled or not.
+            self.halt_mode = false;
+
+            if !self.ime {
+                return false;
+            }
+
             self.ime = false;
 
             self.call(memory_map, interrupt_address);
@@ -343,5 +363,17 @@ impl Cpu {
     pub fn disable_interrupts(&mut self) {
         // memory_map.set(0xFFFF, 0x00);
         self.ime = false;
+    }
+
+    pub fn halt(&mut self) {
+        self.halt_mode = true;
+    }
+
+    pub fn stop(&mut self) {
+        self.stop_mode = true;
+    }
+
+    pub fn is_stopped(&self) -> bool {
+        self.stop_mode
     }
 }
