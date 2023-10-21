@@ -37,7 +37,7 @@ impl Cpu {
             clock_cycles: 0,
             registers: Registers::after_boot(),
             ime: false,
-            
+
             halt_mode: false,
             // stop_mode: false,
         }
@@ -57,7 +57,6 @@ impl Cpu {
         let instruction = Self::decode(self.pc, &memory_map);
 
         self.execute(instruction, memory_map);
-        // println!("{:x}", self.pc);
     }
 
     pub fn fetch(pc: u16, memory_map: &MemoryMap) -> u8 {
@@ -117,9 +116,7 @@ impl Cpu {
     }
 
     fn handle_interrupts(&mut self, memory_map: &mut MemoryMap) -> bool {
- 
         if let Some((interrupt_address, new_if_reg)) = self.handle_interrupt(&memory_map) {
-
             // Halt mode is disabled regardless of whether the interrupt is handled or not.
             self.halt_mode = false;
 
@@ -174,7 +171,8 @@ impl Cpu {
 
     pub fn add_u16(&mut self, rhs: u16) {
         let lhs = self.registers.hl();
-        self.registers.set_hl(self.registers.hl().wrapping_add(rhs) as u16);
+        self.registers
+            .set_hl(self.registers.hl().wrapping_add(rhs) as u16);
 
         self.registers.set_flags(
             self.registers.get_z(),

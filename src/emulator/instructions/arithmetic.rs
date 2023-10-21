@@ -160,11 +160,10 @@ pub fn dec_h(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 4 <br>
 ///  Flags affected: Z - 0 C
 pub fn daa(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-
     // TODO:
     /*
-        DAA is intended to be run immediately after an addition or subtraction operation, 
-        where the operands were BCD encoded. 
+        DAA is intended to be run immediately after an addition or subtraction operation,
+        where the operands were BCD encoded.
         So the result (stored in the A register) is the BCD encoded result of the previous operation.
     */
 
@@ -190,7 +189,8 @@ pub fn daa(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
         }
     }
 
-    cpu.registers.set_flags((cpu.registers.a == 0) as u8, cpu.registers.get_n(), 0, cy);
+    cpu.registers
+        .set_flags((cpu.registers.a == 0) as u8, cpu.registers.get_n(), 0, cy);
 
     4
 }

@@ -13,10 +13,10 @@ Memory map of the gameboy(from pandocs: http://bgb.bircd.org/pandocs.htm):
     FF80-FFFE   High RAM (HRAM)
     FFFF        Interrupt Enable Register
 */
-use std::{path::Path, collections::HashMap, ptr::copy_nonoverlapping};
+use std::{collections::HashMap, path::Path, ptr::copy_nonoverlapping};
 use strum_macros::{AsRefStr, EnumIter};
 
-use super::mbc::{Mbc, self};
+use super::mbc::{self, Mbc};
 
 #[repr(u16)]
 #[allow(dead_code)]
@@ -81,21 +81,21 @@ pub enum Io {
 
 #[derive(Clone)]
 pub struct MemoryMap {
-    rom_banks: Vec<[u8; 0x4000]>,    // 16KB rom banks that is 'in the cartridge'.
-    vrams: Vec<[u8; 0x2000]>,        // 8KB video rams(VRAM)
+    rom_banks: Vec<[u8; 0x4000]>, // 16KB rom banks that is 'in the cartridge'.
+    vrams: Vec<[u8; 0x2000]>,     // 8KB video rams(VRAM)
     external_ram: Vec<[u8; 0x2000]>, // 8KB external ram that is'in the cartridge'.
-    wrams: Vec<[u8; 0x1000]>,        // 4KB work rams(WRAM)
-    oam: [u8; 0x100],                // Sprite Attribute Table(OAM)
+    wrams: Vec<[u8; 0x1000]>,     // 4KB work rams(WRAM)
+    oam: [u8; 0x100],             // Sprite Attribute Table(OAM)
     io_ports: [u8; 0x80],
     high_ram: [u8; 0x7F],
     ier: u8, // Interrupt Enable Register
-    
+
     mbc: Box<dyn Mbc>,
 
     pub boot_rom: Vec<u8>,
 
     pub changes: HashMap<u16, u8>,
-    
+
     pub memory_watches: Vec<(u16, Option<u8>)>,
     pub triggered_watch: Option<usize>,
 
@@ -120,9 +120,9 @@ impl MemoryMap {
 
             memory_watches: Vec::new(),
             triggered_watch: None,
-            
+
             changes: HashMap::new(),
-            on_dma_transfer: false
+            on_dma_transfer: false,
         }
     }
 
@@ -165,12 +165,11 @@ impl MemoryMap {
     }
 
     pub fn load_rom<T: AsRef<Path>>(&mut self, path: T) {
-
         let rom = std::fs::read(path).unwrap();
 
         let cartridge_type = rom[0x147];
         let rom_bank_count = 1 << (rom[0x148] + 1);
-        
+
         let ram_bank_count = match rom[0x149] {
             0 => 0,
             0x2 => 1,
@@ -220,7 +219,6 @@ impl MemoryMap {
     }
 
     pub fn clear_boot_rom(&mut self) {
-        
         let boot_rom_length = self.boot_rom.len();
         self.boot_rom.clear();
 
@@ -230,11 +228,10 @@ impl MemoryMap {
     }
 
     pub fn set(&mut self, address: u16, mut value: u8) {
-        
         let lcd_disabled = (self.get_io(Io::LCDC) & 0x80) == 0;
 
         let address = address as usize;
-        
+
         if self.on_dma_transfer && (address < 0xFF80 || address == 0xFFFF) {
             // CPU can access only HRAM (memory at FF80-FFFE) during DMA transfer.
             return;
@@ -254,7 +251,7 @@ impl MemoryMap {
             if let Some(ram_bank) = self.mbc.get_ram_bank() {
                 if !self.external_ram.is_empty() {
                     self.external_ram[ram_bank][address - 0xA000] = value;
-                }                
+                }
             }
         } else if address < 0xD000 {
             // C000-CFFF   4KB Work RAM Bank 0 (WRAM)
@@ -292,12 +289,15 @@ impl MemoryMap {
             self.ier = value;
         }
 
-        self.triggered_watch = self.memory_watches.iter().position(|&(watch_address, watch_value)| {
+        self.triggered_watch =
+            self.memory_watches
+                .iter()
+                .position(|&(watch_address, watch_value)| {
+                    watch_address == address as u16
+                        && watch_value.map_or(true, |watch_value| watch_value == value)
+                });
 
-            watch_address == address as u16 && watch_value.map_or(true, |watch_value| watch_value == value)
-        });
-
-        self.mbc.set(address as u16,  value);
+        self.mbc.set(address as u16, value);
 
         self.changes.insert(address as u16, value);
     }
@@ -398,7 +398,6 @@ impl MemoryMap {
     }
 
     pub fn ppu_get_vram(&self, address: u16) -> u8 {
-
         /*
             At various times during PPU operation read access to VRAM is blocked and the value read is $FF:
             LCD turning off
@@ -412,7 +411,7 @@ impl MemoryMap {
 
         if lcdc & 0x80 == 0 {
             // LCDC off
-            0xFF            
+            0xFF
         } else if stat & 0x3 != 0x3 {
             // Mode is not 3(pixel transfer)
             0xFF
@@ -437,18 +436,17 @@ impl MemoryMap {
     }
 
     pub fn dma_transfer(&mut self, source: u8) {
-        
         // TODO: XX(source) = $00 to $DF
         if source > 0xDF {
             return;
         }
 
         let source = (source as u16) << 8;
-        
+
         for i in 0..0xA0 {
             self.set(0xFE00 + i, self.get(source + i));
         }
-        
+
         self.on_dma_transfer = true;
     }
 }

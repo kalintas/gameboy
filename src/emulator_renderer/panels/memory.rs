@@ -56,7 +56,6 @@ impl MemoryPanel {
 impl Panel for MemoryPanel {
     fn update(&mut self, _: &Emulator, changes: &HashMap<u16, u8>) {
         for (address, value) in changes.iter() {
-            
             let address = *address as usize;
 
             let index = (address / 0x10) * 57 + (address % 0x10) * 2 + 6;

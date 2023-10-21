@@ -23,9 +23,8 @@ pub struct EmulatorRenderer {
 
 impl EmulatorRenderer {
     pub fn new() -> Self {
-
-        let renderer = Renderer::new("Gameboy", 800, 739).unwrap(); 
-        let panels = Panels::new();  // Panels must be initialized after creating OpenGL context.
+        let renderer = Renderer::new("Gameboy", 800, 739).unwrap();
+        let panels = Panels::new(); // Panels must be initialized after creating OpenGL context.
 
         Self {
             running: true,
@@ -52,7 +51,8 @@ impl EmulatorRenderer {
             }
 
             emulator.update_joypad_keys(
-                self.panels.keyboard_map
+                self.panels
+                    .keyboard_map
                     .update_keys(keyboard_state.pressed_scancodes().collect()),
             );
 
@@ -110,7 +110,6 @@ impl EmulatorRenderer {
             let mut reset_emulator = false;
 
             self.renderer.render(|ui| {
-
                 let small_panel = |panel: &mut dyn Panel| {
                     if ui
                         .menu_item_config(panel.get_name())
@@ -123,16 +122,15 @@ impl EmulatorRenderer {
 
                 ui.main_menu_bar(|| {
                     ui.menu("File", || {
-                        
                         if ui.menu_item("Load Cartidage") {
-                            let file = FileDialog::set_directory(FileDialog::new(), "./roms").pick_file();
+                            let file =
+                                FileDialog::set_directory(FileDialog::new(), "./roms").pick_file();
 
                             if let Some(file_path) = file {
-
                                 *emulator = Emulator::after_boot();
                                 emulator.load_cartidge(file_path);
                                 reset_emulator = true;
-                            } 
+                            }
                         }
 
                         if ui.menu_item("Reload Cartidage") {
@@ -147,9 +145,7 @@ impl EmulatorRenderer {
                         }
                     });
 
-
                     ui.menu("Window", || {
-
                         small_panel(&mut self.panels.io_map);
                         small_panel(&mut self.panels.keyboard_map);
                         small_panel(&mut self.panels.bg_map);

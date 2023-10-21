@@ -45,8 +45,7 @@ impl Panel for IoMapPanel {
                 std::str::from_utf8_unchecked(&empty)
             };
 
-            if super::hex_input_u8(ui, name, &mut register)
-            {
+            if super::hex_input_u8(ui, name, &mut register) {
                 emulator.memory_map.set_io(io, register);
             }
         };

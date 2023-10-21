@@ -1,7 +1,7 @@
 pub mod cpu;
 mod instructions;
-pub mod memory_map;
 mod mbc;
+pub mod memory_map;
 pub mod ppu;
 mod registers;
 
@@ -78,7 +78,6 @@ pub struct Emulator {
 }
 
 impl Emulator {
-
     #[allow(dead_code)]
     pub fn new(boot_rom_path: impl AsRef<Path>) -> Self {
         let mut emulator = Self {
@@ -187,15 +186,17 @@ impl Emulator {
                 self.memory_map.increment_div();
             }
 
-            self.ppu.cycle(&mut self.memory_map, (ppu::PPU_CLOCK_RATE * 4) / CPU_CLOCK_RATE);
+            self.ppu.cycle(
+                &mut self.memory_map,
+                (ppu::PPU_CLOCK_RATE * 4) / CPU_CLOCK_RATE,
+            );
 
             // We check each time if the cpu clock is lower than base clock.
             // This is done because Cpu instructions have different instruction latencies.
-            if self.cpu.clock_cycles - start_cpu_clock_cycles <= self.base_clock - start_base_clock {
-                
+            if self.cpu.clock_cycles - start_cpu_clock_cycles <= self.base_clock - start_base_clock
+            {
                 // Check if the DMA transfer is over.
                 if let Some(dma_start) = self.dma_transfer_start {
-                    
                     let diff = if dma_start > self.base_clock {
                         (CPU_CLOCK_RATE + self.base_clock) - dma_start
                     } else {
@@ -207,7 +208,7 @@ impl Emulator {
                         self.dma_transfer_start = None;
                         self.memory_map.on_dma_transfer = false;
                     } else {
-                        // Set DMA transfer true for restricting CPU memory access. 
+                        // Set DMA transfer true for restricting CPU memory access.
                         self.memory_map.on_dma_transfer = true;
                     }
                 }
@@ -246,9 +247,8 @@ impl Emulator {
 
     #[allow(dead_code)]
     pub fn cycle<T: Fn(u16) -> bool>(&mut self, elapsed_time: f32, on_change: Option<T>) {
-        
         let base_clock_cycles = (CPU_CLOCK_RATE as f32 * elapsed_time) as u32;
-    
+
         self.cycle_impl(base_clock_cycles, on_change)
     }
 
@@ -256,8 +256,8 @@ impl Emulator {
     pub fn cycle_once(&mut self) {
         // Call the implementation function with the base clock's step cycle count.
         // This way emulator exactly does the smallest unit of emulation.
-        // Rust requires a type to be passed on. So we pass a dummy function pointer. 
-        self.cycle_impl::<fn (u16) -> bool>(4, None) 
+        // Rust requires a type to be passed on. So we pass a dummy function pointer.
+        self.cycle_impl::<fn(u16) -> bool>(4, None)
     }
 
     #[allow(dead_code)]
@@ -282,12 +282,13 @@ impl Emulator {
         } else {
             return;
         };
-        
+
         self.memory_map.set_io(Io::JOYP, (joyp & 0xF0) | keys);
 
         // Handle interrupt
-        if keys != 0xF  {
-            self.memory_map.set_io(Io::IF, self.memory_map.get_io(Io::IF) | 0x10);
+        if keys != 0xF {
+            self.memory_map
+                .set_io(Io::IF, self.memory_map.get_io(Io::IF) | 0x10);
         }
     }
 }

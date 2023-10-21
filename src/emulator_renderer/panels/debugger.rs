@@ -1,9 +1,14 @@
-use std::{time::Instant, fs::File, io::{BufWriter, Write}, collections::HashMap};
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::{BufWriter, Write},
+    time::Instant,
+};
 
 use imgui::StyleColor;
 use strum::IntoEnumIterator;
 
-use crate::emulator::{cpu::Cpu, Emulator, memory_map::Io};
+use crate::emulator::{cpu::Cpu, memory_map::Io, Emulator};
 
 use super::{GoToLinePopup, Panel};
 
@@ -13,18 +18,16 @@ use super::{GoToLinePopup, Panel};
 // Find a way to create the display on the fly. -> This will solve all updating costs and will make it real-time updatable
 // Currently it works but this update is required immediately.
 
-
 struct DebuggerWindow {
     opened: bool,
     current_item: i32,
     strings: Vec<String>,
 
     name: &'static str,
-    size: [f32; 2]
+    size: [f32; 2],
 }
 
 impl DebuggerWindow {
-
     fn new(name: &'static str, size: [f32; 2]) -> Self {
         Self {
             opened: false,
@@ -32,12 +35,11 @@ impl DebuggerWindow {
 
             strings: Vec::new(),
             name,
-            size
+            size,
         }
     }
 
     fn render(&mut self, ui: &imgui::Ui, func: impl FnOnce(i32, &mut Vec<String>)) {
-
         self.opened |= ui.button(self.name);
 
         if self.opened {
@@ -45,7 +47,6 @@ impl DebuggerWindow {
                 .opened(&mut self.opened)
                 .size(self.size, imgui::Condition::FirstUseEver)
                 .build(|| {
-                    
                     let strings: Vec<&str> = self.strings.iter().map(|s| &**s).collect();
 
                     let window_size = ui.window_size();
@@ -61,7 +62,6 @@ impl DebuggerWindow {
 }
 
 struct MemoryWatchWindow {
-
     debugger_window: DebuggerWindow,
 
     current_address: i32,
@@ -71,17 +71,16 @@ struct MemoryWatchWindow {
 }
 
 impl MemoryWatchWindow {
-
     fn new() -> Self {
         Self {
             debugger_window: DebuggerWindow::new("Memory Watch", [300.0, 320.0]),
-            
+
             current_address: 0,
             current_io_address: String::new(),
             current_value: 0,
-            value_dont_care: true
+            value_dont_care: true,
         }
-    }    
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -104,7 +103,7 @@ pub struct DebuggerPanel {
     update_required: bool,
 
     go_to_line_popup: GoToLinePopup,
-    
+
     breakpoints_window: DebuggerWindow,
     memory_watch_window: MemoryWatchWindow,
 }
@@ -214,11 +213,12 @@ impl DebuggerPanel {
     }
 
     pub fn dump_strings(&self) {
-
         let file = File::create("c:/Users/kerem/Desktop/disassembly_dump.txt").unwrap();
         let mut file = BufWriter::new(file);
 
-        self.strings.iter().for_each(|string| write!(file, "{}\n", string).unwrap());
+        self.strings
+            .iter()
+            .for_each(|string| write!(file, "{}\n", string).unwrap());
     }
 
     fn get_pc_row(&self, emulator: &Emulator) -> i32 {
@@ -387,13 +387,10 @@ impl Panel for DebuggerPanel {
                     // Breakpoints window
                     self.breakpoints_window.render(ui, |current_item, strings| {
                         if current_item >= 0 {
-                                    
                             let current_item = current_item as usize;
 
                             if current_item < self.breakpoints.len() {
-
                                 if ui.button("Delete Breakpoint") {
-
                                     self.breakpoints.remove(current_item);
                                     strings.remove(current_item);
                                 }
@@ -410,85 +407,119 @@ impl Panel for DebuggerPanel {
                     // Memory Watch Window
                     let mut deleted_string_index = None;
 
-                    self.memory_watch_window.debugger_window.render(ui, |current_item, strings| {
-                        
-                        if current_item >= 0 {
+                    self.memory_watch_window
+                        .debugger_window
+                        .render(ui, |current_item, strings| {
+                            if current_item >= 0 {
+                                let current_item = current_item as usize;
 
-                            let current_item = current_item as usize;
-
-                            if current_item < emulator.memory_map.memory_watches.len() {
-
-                                if ui.button("Delete Memory Watch") {
-                                    emulator.memory_map.memory_watches.remove(current_item);
-                                    deleted_string_index = Some(current_item);
+                                if current_item < emulator.memory_map.memory_watches.len() {
+                                    if ui.button("Delete Memory Watch") {
+                                        emulator.memory_map.memory_watches.remove(current_item);
+                                        deleted_string_index = Some(current_item);
+                                    }
                                 }
                             }
-                        }
 
-                        let width_token = ui.push_item_width(100.0);
-                        if super::hex_input_u16(ui, "Address", &mut self.memory_watch_window.current_address) {
-
-                            if let Some(io) = Io::iter().find(|io| *io as i32 == self.memory_watch_window.current_address) {
-                                // Check if there is an io register by this address.
-                                self.memory_watch_window.current_io_address = io.as_ref().to_owned();
-                            } else {
-                                self.memory_watch_window.current_io_address = String::new();
+                            let width_token = ui.push_item_width(100.0);
+                            if super::hex_input_u16(
+                                ui,
+                                "Address",
+                                &mut self.memory_watch_window.current_address,
+                            ) {
+                                if let Some(io) = Io::iter().find(|io| {
+                                    *io as i32 == self.memory_watch_window.current_address
+                                }) {
+                                    // Check if there is an io register by this address.
+                                    self.memory_watch_window.current_io_address =
+                                        io.as_ref().to_owned();
+                                } else {
+                                    self.memory_watch_window.current_io_address = String::new();
+                                }
                             }
-                        }
-                        ui.same_line();
+                            ui.same_line();
 
-                        ui.text("or");
-                        ui.same_line();
-                        if ui.input_text("Io", &mut self.memory_watch_window.current_io_address).build() {
-                            
-                            if let Some(io) = Io::iter().find(|io| io.as_ref() == self.memory_watch_window.current_io_address.to_uppercase()) {
+                            ui.text("or");
+                            ui.same_line();
+                            if ui
+                                .input_text("Io", &mut self.memory_watch_window.current_io_address)
+                                .build()
+                            {
+                                if let Some(io) = Io::iter().find(|io| {
+                                    io.as_ref()
+                                        == self
+                                            .memory_watch_window
+                                            .current_io_address
+                                            .to_uppercase()
+                                }) {
+                                    self.memory_watch_window.current_address = io as i32;
+                                } else {
+                                    // Not a valid io name. Clear the string.
+                                    self.memory_watch_window.current_io_address = String::new();
+                                    self.memory_watch_window.current_address = 0;
+                                }
+                            }
 
-                                self.memory_watch_window.current_address = io as i32;
-                            } else {
-                                // Not a valid io name. Clear the string.
-                                self.memory_watch_window.current_io_address = String::new();
+                            super::hex_input_u8(
+                                ui,
+                                "Value",
+                                &mut self.memory_watch_window.current_value,
+                            );
+                            ui.same_line();
+                            width_token.end();
+                            ui.checkbox(
+                                "Don't Care",
+                                &mut self.memory_watch_window.value_dont_care,
+                            );
+
+                            if self.memory_watch_window.value_dont_care {
+                                self.memory_watch_window.current_value = 0;
+                            }
+
+                            if ui.button("Add Memory Watch") {
+                                let address = self.memory_watch_window.current_address;
+                                let value = self.memory_watch_window.current_value;
+
+                                let (value, value_string) =
+                                    if self.memory_watch_window.value_dont_care {
+                                        (None, "XX".to_owned())
+                                    } else {
+                                        (Some(value as u8), format!("{:2x}", value))
+                                    };
+
+                                emulator
+                                    .memory_map
+                                    .memory_watches
+                                    .push((address as u16, value));
+
+                                let io_string =
+                                    if self.memory_watch_window.current_io_address.is_empty() {
+                                        String::new()
+                                    } else {
+                                        format!(
+                                            "({})",
+                                            self.memory_watch_window
+                                                .current_io_address
+                                                .to_uppercase()
+                                        )
+                                    };
+
+                                strings.push(format!(
+                                    "Address: {:04x}{}, Value: {}",
+                                    address, io_string, value_string
+                                ));
+
                                 self.memory_watch_window.current_address = 0;
+                                self.memory_watch_window.current_value = 0;
+                                self.memory_watch_window.current_io_address = String::new();
                             }
-                        }
-
-                        super::hex_input_u8(ui, "Value", &mut self.memory_watch_window.current_value);
-                        ui.same_line();
-                        width_token.end();
-                        ui.checkbox("Don't Care", &mut self.memory_watch_window.value_dont_care);
-                        
-                        if self.memory_watch_window.value_dont_care {
-                            self.memory_watch_window.current_value = 0;
-                        }
-
-                        if ui.button("Add Memory Watch") {
-
-                            let address = self.memory_watch_window.current_address;
-                            let value = self.memory_watch_window.current_value;
-
-                            let (value, value_string) = if self.memory_watch_window.value_dont_care {
-                                (None, "XX".to_owned())
-                            } else {
-                                (Some(value as u8), format!("{:2x}", value))
-                            };
-
-                            emulator.memory_map.memory_watches.push((address as u16, value));
-
-                            let io_string = if self.memory_watch_window.current_io_address.is_empty() {
-                                String::new()
-                            } else {
-                                format!("({})", self.memory_watch_window.current_io_address.to_uppercase())
-                            };
-
-                            strings.push(format!("Address: {:04x}{}, Value: {}", address, io_string, value_string));
-
-                            self.memory_watch_window.current_address = 0;
-                            self.memory_watch_window.current_value = 0;
-                            self.memory_watch_window.current_io_address = String::new();
-                        }
-                    });
+                        });
 
                     if let Some(deleted_string_index) = deleted_string_index {
-                        self.memory_watch_window.debugger_window.strings.remove(deleted_string_index);
+                        self.memory_watch_window
+                            .debugger_window
+                            .strings
+                            .remove(deleted_string_index);
                     }
 
                     // // Clear breakpoints button
@@ -580,10 +611,12 @@ impl Panel for DebuggerPanel {
                                 pointer,
                             });
 
-                            let breakpoint_string = format!("Line: {}, Address: {:04x}, Instruction: {}", 
-                                current_row, 
-                                pointer, 
-                                Cpu::decode(pointer, &emulator.memory_map).name);
+                            let breakpoint_string = format!(
+                                "Line: {}, Address: {:04x}, Instruction: {}",
+                                current_row,
+                                pointer,
+                                Cpu::decode(pointer, &emulator.memory_map).name
+                            );
 
                             self.breakpoints_window.strings.push(breakpoint_string);
                         }
@@ -591,7 +624,6 @@ impl Panel for DebuggerPanel {
 
                     if let Some(color) = text_color {
                         color.pop();
-                    
                     }
                 });
 

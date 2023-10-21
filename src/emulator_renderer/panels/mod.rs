@@ -1,23 +1,19 @@
+pub mod bg_map;
 pub mod debugger;
 pub mod io_map;
 pub mod keyboard_map;
 pub mod memory;
 pub mod registers;
-pub mod bg_map;
 
 use std::collections::HashMap;
 
-use imgui::{Ui, internal::DataTypeKind};
+use imgui::{internal::DataTypeKind, Ui};
 
 use crate::emulator::Emulator;
 
 use self::{
-    debugger::DebuggerPanel, 
-    memory::MemoryPanel, 
-    registers::RegistersPanel, 
-    keyboard_map::KeyboardMapPanel, 
-    io_map::IoMapPanel,
-    bg_map::BgMapPanel, 
+    bg_map::BgMapPanel, debugger::DebuggerPanel, io_map::IoMapPanel,
+    keyboard_map::KeyboardMapPanel, memory::MemoryPanel, registers::RegistersPanel,
 };
 
 pub trait Panel {
@@ -37,7 +33,6 @@ pub trait Panel {
 }
 
 pub struct Panels {
-
     pub debugger: DebuggerPanel,
     pub memory: MemoryPanel,
     pub registers: RegistersPanel,
@@ -48,13 +43,12 @@ pub struct Panels {
 }
 
 impl Panels {
-
     pub fn new() -> Self {
         Self {
             debugger: DebuggerPanel::new(),
             memory: MemoryPanel::new(),
             registers: RegistersPanel::new(),
-        
+
             keyboard_map: KeyboardMapPanel::new(),
             io_map: IoMapPanel::new(),
             bg_map: BgMapPanel::new(),
@@ -67,7 +61,7 @@ macro_rules! call_small_panels {
         $panels.keyboard_map.$function($($arguments,)*);
         $panels.io_map.$function($($arguments,)*);
         $panels.bg_map.$function($($arguments,)*);
-    };  
+    };
 }
 
 macro_rules! call_all_panels {
@@ -77,29 +71,28 @@ macro_rules! call_all_panels {
         $panels.registers.$function($($arguments,)*);
 
         panels::call_small_panels!($panels, $function, $($arguments), +);
-    };  
+    };
 }
 
-pub(crate) use call_small_panels;
 pub(crate) use call_all_panels;
+pub(crate) use call_small_panels;
 
 // Utility
 pub fn hex_input_u8<T: DataTypeKind>(ui: &imgui::Ui, name: &str, value: &mut T) -> bool {
     ui.input_scalar(name, value)
-    .chars_hexadecimal(true)
-    .chars_uppercase(true)
-    .display_format("%02x")
-    .build()
+        .chars_hexadecimal(true)
+        .chars_uppercase(true)
+        .display_format("%02x")
+        .build()
 }
 
 pub fn hex_input_u16<T: DataTypeKind>(ui: &imgui::Ui, name: &str, value: &mut T) -> bool {
     ui.input_scalar(name, value)
-    .chars_hexadecimal(true)
-    .chars_uppercase(true)
-    .display_format("%04x")
-    .build()
+        .chars_hexadecimal(true)
+        .chars_uppercase(true)
+        .display_format("%04x")
+        .build()
 }
-
 
 pub struct GoToLinePopup {
     name: &'static str,
