@@ -23,12 +23,15 @@ pub struct EmulatorRenderer {
 
 impl EmulatorRenderer {
     pub fn new() -> Self {
+
+        let renderer = Renderer::new("Gameboy", 800, 739).unwrap(); 
+        let panels = Panels::new();  // Panels must be initialized after creating OpenGL context.
+
         Self {
             running: true,
 
-            panels: Panels::new(),
-
-            renderer: Renderer::new("Gameboy", 800, 739).unwrap(),
+            panels,
+            renderer,
         }
     }
 
@@ -107,11 +110,22 @@ impl EmulatorRenderer {
             let mut reset_emulator = false;
 
             self.renderer.render(|ui| {
+
+                let small_panel = |panel: &mut dyn Panel| {
+                    if ui
+                        .menu_item_config(panel.get_name())
+                        .selected(panel.is_opened())
+                        .build()
+                    {
+                        panel.set_opened(!panel.is_opened());
+                    }
+                };
+
                 ui.main_menu_bar(|| {
                     ui.menu("File", || {
                         
                         if ui.menu_item("Load Cartidage") {
-                            let file = FileDialog::new().pick_file();
+                            let file = FileDialog::set_directory(FileDialog::new(), "./roms").pick_file();
 
                             if let Some(file_path) = file {
 
@@ -133,20 +147,12 @@ impl EmulatorRenderer {
                         }
                     });
 
-                    ui.menu("Window", || {
 
-                        let small_panel = |panel: &mut dyn Panel| {
-                            if ui
-                                .menu_item_config(panel.get_name())
-                                .selected(panel.is_opened())
-                                .build()
-                            {
-                                panel.set_opened(!panel.is_opened());
-                            }
-                        };
+                    ui.menu("Window", || {
 
                         small_panel(&mut self.panels.io_map);
                         small_panel(&mut self.panels.keyboard_map);
+                        small_panel(&mut self.panels.bg_map);
                     });
 
                     ui.menu("Debug", || {
@@ -163,7 +169,7 @@ impl EmulatorRenderer {
                         }
 
                         if ui.menu_item("Clear All Breakpoints") {
-                            self.panels.debugger.breakpoints.clear();
+                            self.panels.debugger.clear_breakpoints();
                         }
 
                         if ui.menu_item("Dump disassembly") {

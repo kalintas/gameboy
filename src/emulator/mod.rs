@@ -1,6 +1,7 @@
 pub mod cpu;
 mod instructions;
 pub mod memory_map;
+mod mbc;
 pub mod ppu;
 mod registers;
 
@@ -63,6 +64,7 @@ impl AsRef<str> for JoypadKeys {
     }
 }
 
+#[derive(Clone)]
 pub struct Emulator {
     pub cpu: Cpu,
     pub ppu: Ppu,
@@ -76,9 +78,10 @@ pub struct Emulator {
 }
 
 impl Emulator {
+
     #[allow(dead_code)]
-    pub fn new() -> Self {
-        Self {
+    pub fn new(boot_rom_path: impl AsRef<Path>) -> Self {
+        let mut emulator = Self {
             cpu: Cpu::new(),
             ppu: Ppu::new(),
 
@@ -88,9 +91,14 @@ impl Emulator {
             dma_transfer_start: None,
 
             joypad_keys: JoypadKeys::NONE,
-        }
+        };
+
+        emulator.memory_map.load_boot_rom(boot_rom_path);
+
+        emulator
     }
 
+    #[allow(dead_code)]
     pub fn after_boot() -> Self {
         Self {
             cpu: Cpu::after_boot(),
@@ -105,6 +113,7 @@ impl Emulator {
         }
     }
 
+    #[allow(dead_code)]
     pub fn load_cartidge(&mut self, path: impl AsRef<Path>) {
         self.memory_map.load_rom(path);
     }
@@ -148,6 +157,9 @@ impl Emulator {
                 10:  65536 Hz   (~67110 Hz SGB)
                 11:  16384 Hz   (~16780 Hz SGB)
         */
+
+        // Reset the triggered watch variable every cycle.
+        self.memory_map.triggered_watch = None;
 
         let tac = self.memory_map.get_io(Io::TAC);
         let timer_clock = match tac & 0x3 {
@@ -201,13 +213,25 @@ impl Emulator {
                 }
 
                 self.cpu.cycle(&mut self.memory_map);
-                
+
+                // Memory is triggered in user given condition. Stop execution.
+                if self.memory_map.triggered_watch.is_some() {
+                    return;
+                }
+
                 // Check if the DMA transfer is started.
                 if self.memory_map.on_dma_transfer && self.dma_transfer_start.is_none() {
                     self.dma_transfer_start = Some(self.base_clock);
                 }
                 // Reset DMA transfer so PPU can access memory.
                 self.memory_map.on_dma_transfer = false;
+
+                // Check if there is an boot rom in the memory map.
+                // Boot rom hands over the control to cartridges rom in 0x100.
+                if !self.memory_map.boot_rom.is_empty() && self.cpu.pc >= 0x100 {
+                    // Clear the boot room.
+                    self.memory_map.clear_boot_rom();
+                }
 
                 if let Some(func) = &on_change {
                     if func(self.cpu.pc) {
@@ -220,7 +244,7 @@ impl Emulator {
         }
     }
 
-
+    #[allow(dead_code)]
     pub fn cycle<T: Fn(u16) -> bool>(&mut self, elapsed_time: f32, on_change: Option<T>) {
         
         let base_clock_cycles = (CPU_CLOCK_RATE as f32 * elapsed_time) as u32;
@@ -228,6 +252,7 @@ impl Emulator {
         self.cycle_impl(base_clock_cycles, on_change)
     }
 
+    #[allow(dead_code)]
     pub fn cycle_once(&mut self) {
         // Call the implementation function with the base clock's step cycle count.
         // This way emulator exactly does the smallest unit of emulation.
@@ -235,10 +260,12 @@ impl Emulator {
         self.cycle_impl::<fn (u16) -> bool>(4, None) 
     }
 
+    #[allow(dead_code)]
     pub fn update_joypad_keys(&mut self, keys: JoypadKeys) {
         self.joypad_keys = keys;
     }
 
+    #[allow(dead_code)]
     pub fn update_joypad(&mut self) {
         let joyp = self.memory_map.get_io(Io::JOYP);
 

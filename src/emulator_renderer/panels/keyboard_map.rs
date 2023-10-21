@@ -11,10 +11,10 @@ const DEFAULT_MAP: [(JoypadKeys, Scancode); 8] = [
     (JoypadKeys::BUTTONB, Scancode::X),
     (JoypadKeys::START, Scancode::Return),
     (JoypadKeys::SELECT, Scancode::Backspace),
-    (JoypadKeys::LEFT, Scancode::A),
-    (JoypadKeys::RIGHT, Scancode::D),
-    (JoypadKeys::DOWN, Scancode::S),
-    (JoypadKeys::UP, Scancode::W),
+    (JoypadKeys::LEFT, Scancode::Left),
+    (JoypadKeys::RIGHT, Scancode::Right),
+    (JoypadKeys::DOWN, Scancode::Down),
+    (JoypadKeys::UP, Scancode::Up),
 ];
 
 pub struct KeyboardMapPanel {
@@ -42,7 +42,6 @@ impl KeyboardMapPanel {
                 if *scancode != Scancode::Escape {
                     self.keyboard_map[index].1 = *scancode;
                 }
-                self.changing_key_index = None;
             }
         }
 
@@ -76,8 +75,12 @@ impl Panel for KeyboardMapPanel {
             .build(|| {
                 ui.set_window_font_scale(1.2);
 
-                if ui.is_window_focused() && ui.is_key_down(Key::Escape) {
-                    return false;
+                if ui.is_window_focused() && ui.is_key_pressed_no_repeat(Key::Escape) {
+                    if self.changing_key_index.is_some() {
+                        self.changing_key_index = None;
+                    } else {
+                        return false;
+                    }
                 }
 
                 if ui.button("Reset layout") {

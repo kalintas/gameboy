@@ -10,7 +10,7 @@ pub const PPU_CLOCK_RATE: u32 = 4_194_304;
 pub const PPU_ONE_FRAME: u32 = 70_224;
 pub const PPU_ONE_LINE: u32 = 456;
 
-const COLOR_SHADES: [u32; 4] = [0xff0fbc9b, 0xff0fac8b, 0xff306230, 0xff0f380f];
+pub const COLOR_SHADES: [u32; 4] = [0xff0fbc9b, 0xff0fac8b, 0xff306230, 0xff0f380f];
 
 // Object AKA Sprite
 #[repr(C)]
@@ -24,11 +24,12 @@ struct Object {
 
 impl Object {
 
-    fn is_visible(&self, ly: u8) -> bool {
+    fn is_visible(&self, ly: u8, lcdc: u8) -> bool {
 
-        // TODO: Check 8x16
+        let object_height = if lcdc & 0x4 == 0 { 8 } else { 16 };
+
         let top_y = self.pos_y as i32 - 16;
-        let bottom_y = top_y + 8;
+        let bottom_y = top_y + object_height as i32;
         let ly = ly as i32;
 
         // Check if this sprite has to be drawn in this line.
@@ -88,19 +89,13 @@ impl PixelFifo {
             _ => unreachable!()
         });
 
-        let pallete = [
-            COLOR_SHADES[(pallete_index & 0x3) as usize],        // White
-            COLOR_SHADES[((pallete_index >> 2) & 0x3) as usize], // Light gray
-            COLOR_SHADES[((pallete_index >> 4) & 0x3) as usize], // Dark gray
-            COLOR_SHADES[((pallete_index >> 6) & 0x3) as usize], // Black
-        ];
+        let pallete = Ppu::get_color_pallete(pallete_index);
 
         (pallete[color as usize], color as u16, priority)
     }
 
     fn push(&mut self, tile: u16, source: u32, priority: u16) {
 
-        // TODO:
         match source {
             Self::OBJECT0_PIXEL | Self::OBJECT1_PIXEL =>  {
 
@@ -151,6 +146,7 @@ enum PixelFetcherMode {
     Push((u8, u8)),       // 1 dot until success
 }
 
+#[derive(Clone)]
 struct PixelFetcher {
     pos_x: u16,
 
@@ -163,6 +159,7 @@ struct PixelFetcher {
 /*
     TODOS:
     1. Dry background render run takes 176 dots instead of 176 dots.
+    2. SCX
 */
 
 impl PixelFetcher {
@@ -190,6 +187,12 @@ impl PixelFetcher {
             0x8000
         };
 
+        let scx = memory_map.get_io(Io::SCX) as u16;
+        let scy = memory_map.get_io(Io::SCY) as u16;
+        
+        // Bit 2 - OBJ (Sprite) Size (0=8x8, 1=8x16)
+        let object_height = if lcdc & 0x4 == 0 { 8 } else { 16 };
+
         self.mode = match self.mode {
             PixelFetcherMode::GetTile => {
 
@@ -197,7 +200,7 @@ impl PixelFetcher {
                     object.tile_index
                 } else {
                     // Get background tile from memory map.
-                    memory_map.ppu_get_vram(bg_tile_map_start + self.pos_x / 8 + (ly / 8) * 32)
+                    memory_map.ppu_get_vram(bg_tile_map_start + ((scx / 8 + self.pos_x / 8) & 0x1F) + (((ly + scy) % 256) / 8) * 32)
                 };
 
                 PixelFetcherMode::GetTileLow(tile_map_value)
@@ -216,10 +219,25 @@ impl PixelFetcher {
 
                     tile_y = ly as i32 - (object.pos_y as i32 - 16);
 
+                    if object_height == 16 {
+                        /*
+                            From pandocs:
+                            In this mode, this byte specifies the index of the first (top) tile of the object. 
+                            This is enforced by the hardware: the least significant bit of the tile index is ignored; 
+                            that is, the top 8×8 tile is “NN & $FE”, and the bottom 8×8 tile is “NN | $01”.
+                        */
+                        // TODO: this breaks the rendering currently.
+                        // if tile_y < 8 {
+                        //     tile_map_value &= 0xFE;
+                        // } else {
+                        //     tile_map_value |= 0x1;
+                        // }
+                    }
+
                     // TODO:
                     if object.attributes & 0x40 != 0 {
                         // Vertical flip
-                        tile_y = 7 - tile_y;
+                        tile_y = object_height as i32 - tile_y - 1;
                     }
 
                     tile_data_start = 0x8000;
@@ -229,7 +247,7 @@ impl PixelFetcher {
                         tile_map_value = (((tile_map_value as u8) as i8)) as i32;
                     }
 
-                    tile_y = (ly % 8) as i32;
+                    tile_y = (((ly + scy) % 256) % 8) as i32;
                     tile_data_start = bg_tile_data_start;
                 }
 
@@ -319,19 +337,25 @@ impl PixelFetcher {
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum Mode {
+pub enum Mode {
     OamSearch = 2,
     PixelTransfer = 3,
     HBlank = 0, // Horizontal blank period
-    VBlank = 1, // Vertical blank period
+    VBlank = 1, // Vertical blank period,
 }
 
+
+#[derive(Clone)]
 pub struct Ppu {
     pub clock_cycles: u32,
 
     mode: Mode,
 
+    enabled: bool,
+
     pos_x: usize,
+    scroll_x: u8,
+
     fifo: PixelFifo,
     oam_fifo: PixelFifo,
 
@@ -348,8 +372,12 @@ impl Ppu {
             clock_cycles: 0,
 
             mode: Mode::OamSearch,
+
+            enabled: false,
             
             pos_x: 0,
+            scroll_x: 0,
+
             fifo: PixelFifo::new(),
             oam_fifo: PixelFifo::new(),
             pixel_fetcher: PixelFetcher::new(),
@@ -384,7 +412,7 @@ impl Ppu {
                     attributes: memory_map.ppu_get_oam(address + 3)
                 };
 
-                if object.is_visible(memory_map.get_io(Io::LY)) {
+                if object.is_visible(memory_map.get_io(Io::LY), memory_map.get_io(Io::LCDC)) {
 
                     self.found_objects.push(object);
 
@@ -415,14 +443,15 @@ impl Ppu {
             Objects: Each object drawn during the scanline (even partially) 
                 incurs a 6- to 11-dot penalty.
         */
-        
+
         let ly = memory_map.get_io(Io::LY);
+        let scx = memory_map.get_io(Io::SCX);
 
         let mut fetcher_cycles = 0;
 
         for _ in 0..dots {
 
-            if self.pos_x >= SCREEN_WIDTH {
+            if self.pos_x >= SCREEN_WIDTH + 8 {
                 break;
             }
 
@@ -436,7 +465,7 @@ impl Ppu {
             if let Some(object) = self.found_objects.last() {
 
                 // +8 is added because object positions are biased.
-                if self.pos_x + 8 == object.pos_x as usize {
+                if self.pos_x == object.pos_x as usize {
 
                     // Wait until the pixel fetcher finishes tile fetching.
                     if self.pixel_fetcher.mode != PixelFetcherMode::GetTile {
@@ -459,6 +488,13 @@ impl Ppu {
             if self.fifo.pixel_count > 8 {
 
                 let (mut color, color_index, _) = self.fifo.pop(memory_map);
+                
+                // Discard the first scrolled pixels that are smaller than a tile.
+                // This creates a smooth scrolling effect.
+                if self.scroll_x < scx % 8 {
+                    self.scroll_x += 1;
+                    continue;
+                }
 
                 if self.oam_fifo.pixel_count > 0 {
                     let (object_color, object_color_index, priority) = self.oam_fifo.pop(memory_map);
@@ -468,7 +504,10 @@ impl Ppu {
                     }
                 }
 
-                self.screen_buffer[self.pos_x + ly as usize * SCREEN_WIDTH] = color;
+                if self.pos_x >= 8 {
+                    self.screen_buffer[(self.pos_x - 8) + ly as usize * SCREEN_WIDTH] = color;
+                }
+                
                 self.pos_x += 1;
             }
         }
@@ -520,15 +559,14 @@ impl Ppu {
                 if line_remainder >= 80 {
 
                     self.pos_x = 0;
+                    self.scroll_x = 0;
                     self.fifo = PixelFifo::new();
                     self.oam_fifo = PixelFifo::new();
                     self.pixel_fetcher = PixelFetcher::new();
-
-                    let scx = memory_map.get_io(Io::SCX);
-                    let scy = memory_map.get_io(Io::SCY);
-
-                    // TODO:
-                    assert!(scx == 0 && scy == 0);
+                    
+                    // Push a background tile that will never be on screen.
+                    // This is done for rendering objects with x < 8.
+                    self.fifo.push(0, PixelFifo::BACKGROUND_PIXEL, 0);
 
                     Mode::PixelTransfer
                 } else {
@@ -537,7 +575,7 @@ impl Ppu {
             },
             Mode::PixelTransfer => {
                 // TODO:
-                if self.pos_x >= SCREEN_WIDTH {
+                if self.pos_x >= SCREEN_WIDTH + 8 {
                     Mode::HBlank
                 } else {
                     return;
@@ -590,6 +628,28 @@ impl Ppu {
 
     pub fn cycle(&mut self, memory_map: &mut MemoryMap, dots: u32) {
         // TODO:
+        
+        let lcdc = memory_map.get_io(Io::LCDC);
+
+        if lcdc & 0x80 == 0 {
+            // LCDC is disabled.
+
+            if self.enabled {
+                // Ppu renders an empty screen when LCD is turned off.
+                // Clear the screen.
+                self.screen_buffer.fill(COLOR_SHADES[0]);
+                
+                // Reset ppu flags.
+                memory_map.set_io(Io::LY, 0);
+                memory_map.set_io(Io::STAT, 0);
+                
+                self.enabled = false;
+            }
+            return;
+        }
+        
+        self.enabled = true;
+        
         assert_eq!(dots, 4);
         match self.mode {
             Mode::OamSearch => self.oam_search(memory_map, dots),
@@ -597,5 +657,18 @@ impl Ppu {
             Mode::HBlank => self.hblank(memory_map, dots),
             Mode::VBlank => self.vblank(memory_map, dots)
         };
+    }
+
+    // pub fn get_mode(&self) -> Mode {
+    //     self.mode
+    // }
+
+    pub fn get_color_pallete(pallete_index: u8) -> [u32; 4] {
+        [
+            COLOR_SHADES[(pallete_index & 0x3) as usize],        // White
+            COLOR_SHADES[((pallete_index >> 2) & 0x3) as usize], // Light gray
+            COLOR_SHADES[((pallete_index >> 4) & 0x3) as usize], // Dark gray
+            COLOR_SHADES[((pallete_index >> 6) & 0x3) as usize], // Black
+        ]
     }
 }

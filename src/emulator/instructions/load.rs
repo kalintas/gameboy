@@ -848,7 +848,7 @@ pub fn push_hl(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn ld_a16_addr_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set_u16(cpu.get_immediate_u16(memory_map), cpu.registers.a as u16);
+    memory_map.set(cpu.get_immediate_u16(memory_map), cpu.registers.a);
     16
 }
 

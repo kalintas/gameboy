@@ -7,7 +7,7 @@ use sdl2::{
 };
 
 pub mod framebuffer;
-mod utils;
+pub mod utils;
 
 use crate::gl_call;
 

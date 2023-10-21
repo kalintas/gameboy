@@ -53,6 +53,7 @@ impl Framebuffer {
         format: u32,
     ) {
         gl_call!(gl::BindFramebuffer(gl::READ_FRAMEBUFFER, self.id));
+        gl_call!(gl::BindTexture(gl::TEXTURE_2D, self.texture));
         gl_call!(gl::TexImage2D(
             gl::TEXTURE_2D,
             0,
@@ -89,6 +90,14 @@ impl Framebuffer {
             gl::COLOR_BUFFER_BIT,
             gl::NEAREST
         ));
+    }
+
+    pub fn get_texture_id(&self) -> u32 {
+        self.texture
+    }
+
+    pub fn bind_buffer(&self) {
+        gl_call!(gl::BindFramebuffer(gl::READ_FRAMEBUFFER, self.id));
     }
 }
 

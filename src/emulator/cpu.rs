@@ -4,6 +4,7 @@ use super::{
     registers::Registers,
 };
 
+#[derive(Clone)]
 pub struct Cpu {
     pub pc: u16,
     pub sp: u16,
@@ -12,7 +13,7 @@ pub struct Cpu {
     pub ime: bool,
 
     halt_mode: bool,
-    stop_mode: bool,
+    // stop_mode: bool,
 }
 
 impl Cpu {
@@ -25,7 +26,7 @@ impl Cpu {
             ime: false,
 
             halt_mode: false,
-            stop_mode: false,
+            // stop_mode: false,
         }
     }
 
@@ -38,7 +39,7 @@ impl Cpu {
             ime: false,
             
             halt_mode: false,
-            stop_mode: false,
+            // stop_mode: false,
         }
     }
 
@@ -56,6 +57,7 @@ impl Cpu {
         let instruction = Self::decode(self.pc, &memory_map);
 
         self.execute(instruction, memory_map);
+        // println!("{:x}", self.pc);
     }
 
     pub fn fetch(pc: u16, memory_map: &MemoryMap) -> u8 {
@@ -155,17 +157,15 @@ impl Cpu {
 
     pub fn add(&mut self, rhs: u8) {
         let lhs = self.registers.a;
-        let result = lhs as u16 + rhs as u16;
+        self.registers.a = self.registers.a.wrapping_add(rhs);
 
         // TODO: check H flag to see if its correct
         self.registers.set_flags(
-            (result == 0) as u8,
+            (self.registers.a == 0) as u8,
             0,
             (lhs & 0xF + rhs & 0xF > 0xF) as u8,
-            (result > 0xFF) as u8,
+            ((lhs as u16 + rhs as u16) > 0xFF) as u8,
         );
-
-        self.registers.a = (result % 0x100) as u8;
     }
 
     pub fn adc(&mut self, rhs: u8) {
@@ -174,16 +174,14 @@ impl Cpu {
 
     pub fn add_u16(&mut self, rhs: u16) {
         let lhs = self.registers.hl();
-        let result = lhs as u32 + rhs as u32;
+        self.registers.set_hl(self.registers.hl().wrapping_add(rhs) as u16);
 
         self.registers.set_flags(
             self.registers.get_z(),
             0,
             ((lhs & 0xFFF) + (rhs & 0xFFF) > 0xFFF) as u8,
-            (result > 0xFFFF) as u8,
+            ((lhs as u32 + rhs as u32) > 0xFFFF) as u8,
         );
-
-        self.registers.set_hl((result % 0x10000) as u16);
     }
 
     pub fn sub(&mut self, rhs: u8) {
@@ -369,11 +367,11 @@ impl Cpu {
         self.halt_mode = true;
     }
 
-    pub fn stop(&mut self) {
-        self.stop_mode = true;
-    }
+    // pub fn stop(&mut self) {
+    //     self.stop_mode = true;
+    // }
 
-    pub fn is_stopped(&self) -> bool {
-        self.stop_mode
-    }
+    // pub fn is_stopped(&self) -> bool {
+    //     self.stop_mode
+    // }
 }

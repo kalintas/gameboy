@@ -126,7 +126,7 @@ pub fn rlc_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 0 0 C
 pub fn rrc_b(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.b = cpu.circular_shift_left(cpu.registers.b, 1);
+    cpu.registers.b = cpu.circular_shift_right(cpu.registers.b, 1);
     8
 }
 
@@ -135,7 +135,7 @@ pub fn rrc_b(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 0 0 C
 pub fn rrc_c(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.c = cpu.circular_shift_left(cpu.registers.c, 1);
+    cpu.registers.c = cpu.circular_shift_right(cpu.registers.c, 1);
     8
 }
 
@@ -144,7 +144,7 @@ pub fn rrc_c(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 0 0 C
 pub fn rrc_d(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.d = cpu.circular_shift_left(cpu.registers.d, 1);
+    cpu.registers.d = cpu.circular_shift_right(cpu.registers.d, 1);
     8
 }
 
@@ -153,7 +153,7 @@ pub fn rrc_d(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 0 0 C
 pub fn rrc_e(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.e = cpu.circular_shift_left(cpu.registers.e, 1);
+    cpu.registers.e = cpu.circular_shift_right(cpu.registers.e, 1);
     8
 }
 
@@ -162,7 +162,7 @@ pub fn rrc_e(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 0 0 C
 pub fn rrc_h(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.h = cpu.circular_shift_left(cpu.registers.h, 1);
+    cpu.registers.h = cpu.circular_shift_right(cpu.registers.h, 1);
     8
 }
 
@@ -171,7 +171,7 @@ pub fn rrc_h(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 0 0 C
 pub fn rrc_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.l = cpu.circular_shift_left(cpu.registers.l, 1);
+    cpu.registers.l = cpu.circular_shift_right(cpu.registers.l, 1);
     8
 }
 
@@ -192,7 +192,7 @@ pub fn rrc_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 0 0 C
 pub fn rrc_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.a = cpu.circular_shift_left(cpu.registers.a, 1);
+    cpu.registers.a = cpu.circular_shift_right(cpu.registers.a, 1);
     8
 }
 

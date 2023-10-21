@@ -42,13 +42,7 @@ impl Panel for RegistersPanel {
 
                 let input_box = |name: &'static str, mut value| -> Option<u16> {
                     ui.set_next_item_width(75.0);
-                    if ui
-                        .input_scalar(name, &mut value)
-                        .chars_hexadecimal(true)
-                        .chars_uppercase(true)
-                        .display_format("%04x")
-                        .build()
-                    {
+                    if super::hex_input_u16(ui, name, &mut value) {
                         Some(value)
                     } else {
                         None
@@ -171,13 +165,7 @@ impl Panel for RegistersPanel {
 
                 let mut joyp = emulator.memory_map.get_io(Io::JOYP);
 
-                if ui
-                    .input_scalar("JOYP", &mut joyp)
-                    .chars_hexadecimal(true)
-                    .chars_uppercase(true)
-                    .display_format("%02x")
-                    .build()
-                {
+                if super::hex_input_u8(ui, "JOYP", &mut joyp) {
                     emulator.memory_map.set_io(Io::JOYP, joyp);
                 }
             });
