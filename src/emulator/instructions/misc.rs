@@ -17,8 +17,8 @@ pub fn nop(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Flags affected: - - - -
 pub fn stop_0(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     // Halt CPU & LCD display until button pressed.
-    unimplemented!();
-    // 4
+    // cpu.stop(); // TODO
+    4
 }
 
 /// HALT - 0x76 <br>

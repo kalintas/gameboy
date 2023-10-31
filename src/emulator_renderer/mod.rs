@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use crate::emulator::ppu;
+use crate::emulator::{ppu, self};
 
 use self::panels::Panels;
 
@@ -34,7 +34,13 @@ impl EmulatorRenderer {
         }
     }
 
-    pub fn render(&mut self, emulator: &mut Emulator) {
+    pub fn run(&mut self) {
+
+        // let emulator = &mut emulator::Emulator::new("./roms/boot/dmg_boot.gb");
+        let emulator = &mut emulator::Emulator::after_boot();
+
+        emulator.load_cartidge("./roms/test/blargg_cpu_instrs.gb");
+        
         self.panels.debugger.pause(emulator);
 
         let framebuffer = Framebuffer::new();
@@ -42,6 +48,8 @@ impl EmulatorRenderer {
         let mut seconds_timer = Instant::now();
 
         while self.running && !self.renderer.poll_events() {
+            
+            // Process events.
             let keyboard_state = self.renderer.event_pump.keyboard_state();
 
             if keyboard_state.is_scancode_pressed(Scancode::LCtrl)
@@ -84,9 +92,7 @@ impl EmulatorRenderer {
 
             emulator.memory_map.changes.clear();
 
-            // Render frame.
             self.renderer.clear_screen();
-
             framebuffer.update_buffer(
                 ppu::SCREEN_WIDTH as _,
                 ppu::SCREEN_HEIGHT as _,
@@ -99,7 +105,8 @@ impl EmulatorRenderer {
                 (ppu::SCREEN_WIDTH as _, ppu::SCREEN_HEIGHT as _),
                 (0, self.renderer.window_height as i32 - 19),
                 (
-                    self.renderer.window_width as i32 / 2,
+                    // (((ppu::SCREEN_WIDTH as f32) / (ppu::SCREEN_HEIGHT as f32)) * ((self.renderer.window_height as f32 - 19.0) * 0.5)) as i32
+                    self.renderer.window_width as i32 / 2, 
                     (self.renderer.window_height as i32 - 19) / 2,
                 ),
             );
@@ -108,6 +115,7 @@ impl EmulatorRenderer {
             let height = (self.renderer.window_height - 19) as f32;
 
             let mut reset_emulator = false;
+            let mut enter_game_mode = false;
 
             self.renderer.render(|ui| {
                 let small_panel = |panel: &mut dyn Panel| {
@@ -139,6 +147,10 @@ impl EmulatorRenderer {
                             reset_emulator = true;
                         }
 
+                        if ui.menu_item("Enter Game Mode        F11") || ui.is_key_down(imgui::Key::F11) {
+                            enter_game_mode = true;
+                        }
+
                         if ui.menu_item("Quit") {
                             self.running = false;
                             return;
@@ -156,7 +168,7 @@ impl EmulatorRenderer {
                             self.panels.debugger.continue_execution();
                         }
 
-                        if ui.menu_item("Run To Next Line        F10") {
+                        if ui.menu_item("Run To Next Line       F10") {
                             self.panels.debugger.run_to_next_line();
                         }
 
@@ -185,6 +197,81 @@ impl EmulatorRenderer {
                 self.panels = Panels::new();
                 self.panels.debugger.pause(emulator);
             }
+
+            if enter_game_mode {
+                let (width, height) = (self.renderer.window_width, self.renderer.window_height);
+
+                self.renderer.window.set_title("Gameboy").unwrap();
+
+                self.run_game_mode(emulator, &framebuffer);
+
+                if !self.running {
+                    break;
+                }
+                self.renderer.resize(width, height);
+                
+                // TOOD: memory_map
+                self.panels.debugger.pause(emulator);
+            }
         }
     }
+
+    fn run_game_mode(&mut self, emulator: &mut Emulator, framebuffer: &Framebuffer) {
+
+        // Resize window.
+        self.renderer.resize(400, 360);
+
+        let mut timer = Instant::now();
+        
+        while self.running && !self.renderer.poll_events() {
+            // Process events.
+            let keyboard_state = self.renderer.event_pump.keyboard_state();
+
+            if keyboard_state.is_scancode_pressed(Scancode::LCtrl)
+                && keyboard_state.is_scancode_pressed(Scancode::W)
+            {
+                self.running = false;
+                return;
+            }
+
+            if keyboard_state.is_scancode_pressed(Scancode::Escape) {
+                return;
+            }
+
+            emulator.update_joypad_keys(
+                self.panels
+                    .keyboard_map
+                    .update_keys(keyboard_state.pressed_scancodes().collect()),
+            );
+
+            let now = Instant::now();
+            let elapsed_time = (now - timer).as_secs_f32();
+            emulator.cycle(elapsed_time);
+            timer = now;
+
+            emulator.memory_map.changes.clear();
+            
+            self.renderer.clear_screen();
+
+            framebuffer.update_buffer(
+                ppu::SCREEN_WIDTH as _,
+                ppu::SCREEN_HEIGHT as _,
+                emulator.ppu.screen_buffer.as_ptr() as _,
+                gl::RGBA8,
+                gl::RGBA,
+            );
+            framebuffer.draw_buffer(
+                (0, 0),
+                (ppu::SCREEN_WIDTH as _, ppu::SCREEN_HEIGHT as _),
+                (0, self.renderer.window_height as i32),
+                (
+                    self.renderer.window_width as i32, 
+                    0,
+                ),
+            );
+            
+            self.renderer.render(|_| {});
+        }
+    }
+
 }

@@ -144,6 +144,8 @@ struct PixelFetcher {
     fetching_object: Option<Object>,
     hit_object: bool, // This is must be set to true in case of an sprite hit.
 
+    is_window: bool,    
+
     mode: PixelFetcherMode,
 }
 
@@ -160,6 +162,7 @@ impl PixelFetcher {
 
             fetching_object: None,
             hit_object: false,
+            is_window: false,
 
             mode: PixelFetcherMode::GetTile,
         }
@@ -175,14 +178,27 @@ impl PixelFetcher {
         let ly = memory_map.get_io(Io::LY) as u16;
 
         let bg_tile_map_start = if lcdc & 0x8 == 0 { 0x9800 } else { 0x9C00 };
-        let bg_tile_data_start = if lcdc & 0x10 == 0 {
+        let w_tile_map_start = if lcdc & 0x40 == 0 { 0x9800 } else { 0x9C00 };        
+
+        let bg_w_tile_data_start = if lcdc & 0x10 == 0 {
             0x9000 // Although it says 8800, if this is the case, patterns have signed numbers from -128 to 127.
         } else {
             0x8000
         };
 
-        let scx = memory_map.get_io(Io::SCX) as u16;
-        let scy = memory_map.get_io(Io::SCY) as u16;
+        let scx;
+        let scy;
+        let tile_map_start;
+
+        if self.is_window {
+            scx = 0;
+            scy = 0;
+            tile_map_start = w_tile_map_start
+        } else {
+            scx = memory_map.get_io(Io::SCX) as u16;
+            scy = memory_map.get_io(Io::SCY) as u16;
+            tile_map_start = bg_tile_map_start;
+        }
 
         // Bit 2 - OBJ (Sprite) Size (0=8x8, 1=8x16)
         let object_height = if lcdc & 0x4 == 0 { 8 } else { 16 };
@@ -194,7 +210,7 @@ impl PixelFetcher {
                 } else {
                     // Get background tile from memory map.
                     memory_map.ppu_get_vram(
-                        bg_tile_map_start
+                        tile_map_start
                             + ((scx / 8 + self.pos_x / 8) & 0x1F)
                             + (((ly + scy) % 256) / 8) * 32,
                     )
@@ -243,7 +259,7 @@ impl PixelFetcher {
                     }
 
                     tile_y = (((ly + scy) % 256) % 8) as i32;
-                    tile_data_start = bg_tile_data_start;
+                    tile_data_start = bg_w_tile_data_start;
                 }
 
                 let tile_index = (tile_data_start + tile_map_value * 16 + tile_y * 2) as u16;
@@ -305,7 +321,14 @@ impl PixelFetcher {
                     // Push transparent pixels with lowest priority.
                     oam_fifo.push(tile, source, (object.attributes >> 7) as u16);
                 } else {
-                    fifo.push(tile, PixelFifo::BACKGROUND_PIXEL, 0);
+
+                    let source = if self.is_window {
+                        PixelFifo::WINDOW_PIXEL
+                    } else {
+                        PixelFifo::BACKGROUND_PIXEL
+                    };
+
+                    fifo.push(tile, source, 0);
                     self.pos_x += 8;
                 }
 
@@ -430,6 +453,11 @@ impl Ppu {
                 incurs a 6- to 11-dot penalty.
         */
 
+        let lcdc = memory_map.get_io(Io::LCDC);
+
+        let wx = memory_map.get_io(Io::WX);
+        let wy = memory_map.get_io(Io::WY);
+
         let ly = memory_map.get_io(Io::LY);
         let scx = memory_map.get_io(Io::SCX);
 
@@ -438,6 +466,15 @@ impl Ppu {
         for _ in 0..dots {
             if self.pos_x >= SCREEN_WIDTH + 8 {
                 break;
+            }
+
+            if lcdc & 0x20 != 0 && ly >= wy && self.pos_x == wx as usize + 1 {
+                // Start of the window.
+                if !self.pixel_fetcher.is_window {
+                    self.fifo = PixelFifo::new(); // Flush the fifo.
+                    self.pixel_fetcher.mode = PixelFetcherMode::GetTile;
+                }
+                self.pixel_fetcher.is_window = true;
             }
 
             // Pixel fetcher cycle takes 2 dots most of the time

@@ -182,6 +182,7 @@ pub fn daa(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
         // Subtraction
         if cpu.registers.get_cy() != 0 {
             cpu.registers.a = cpu.registers.a.wrapping_sub(0x60);
+            cy = 1;
         }
 
         if cpu.registers.get_h() != 0 {
@@ -329,7 +330,7 @@ pub fn dec_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 pub fn ccf(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     // Complement carry flag.
     cpu.registers
-        .set_flags(cpu.registers.get_z(), 0, 0, !cpu.registers.get_cy());
+        .set_flags(cpu.registers.get_z(), 0, 0, (cpu.registers.get_cy() == 0) as u8);
     4
 }
 
@@ -979,8 +980,8 @@ pub fn add_sp_r8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 
     let val = cpu.get_immediate_u8(memory_map);
 
-    let half_carry = (cpu.sp & 0xF + (val as u16) & 0xF) > 0xF;
-    let carry = (cpu.sp & 0xFF + (val as u16) & 0xFF) > 0xFF;
+    let half_carry = ((cpu.sp & 0xF) + ((val as u16) & 0xF)) > 0xF;
+    let carry = ((cpu.sp & 0xFF) + ((val as u16) & 0xFF)) > 0xFF;
 
     cpu.sp = (cpu.sp as i32 + (val as i8) as i32) as u16;
 

@@ -899,8 +899,8 @@ pub fn ld_hl_sp_plusr8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 
     let val = cpu.get_immediate_u8(memory_map);
 
-    let half_carry = (cpu.sp & 0xF + (val as u16) & 0xF) > 0xF;
-    let carry = (cpu.sp & 0xFF + (val as u16) & 0xFF) > 0xFF;
+    let half_carry = ((cpu.sp & 0xF) + ((val as u16) & 0xF)) > 0xF;
+    let carry = ((cpu.sp & 0xFF) + ((val as u16) & 0xFF)) > 0xFF;
 
     cpu.registers
         .set_hl((cpu.sp as i32 + (val as i8) as i32) as u16);

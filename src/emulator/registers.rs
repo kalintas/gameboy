@@ -12,7 +12,7 @@ pub struct Registers {
     pub e: u8,
     pub h: u8,
     pub l: u8,
-    pub f: u8, // flag register
+    f: u8, // flag register
     pub a: u8,
 }
 
@@ -62,7 +62,7 @@ impl Registers {
             } // HL register
             0x3 => {
                 self.a = upper;
-                self.f = lower;
+                self.f = lower & 0xF0; // The first 4 bits of the F flag is always zero.
             } // AF register
             _ => panic!("wrong index parameter!"),
         }

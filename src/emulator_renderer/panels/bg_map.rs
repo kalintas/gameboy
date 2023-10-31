@@ -27,7 +27,7 @@ pub struct BgMapPanel {
 }
 
 impl BgMapPanel {
-    pub fn new() -> Self {
+    pub fn new() -> Self { 
         Self {
             opened: false,
             first_run: false,
@@ -153,8 +153,8 @@ impl Panel for BgMapPanel {
         self.opened &= ui
             .window(self.get_name())
             .opened(&mut self.opened)
-            .resizable(false)
-            .size([400.0, 420.0], imgui::Condition::Always)
+            .resizable(true)
+            .size([400.0, 420.0], imgui::Condition::FirstUseEver)
             .collapsible(true)
             .movable(true)
             .build(|| {
@@ -167,6 +167,7 @@ impl Panel for BgMapPanel {
                 self.framebuffer.bind_buffer();
 
                 let cursor_pos = ui.cursor_screen_pos();
+                let window_size = ui.window_size();
 
                 // TODO: colors are a little off in imgui rendering (like a grayed out version)
                 ui.get_window_draw_list()
@@ -174,8 +175,8 @@ impl Panel for BgMapPanel {
                         TextureId::new(self.framebuffer.get_texture_id() as _),
                         [cursor_pos[0], cursor_pos[1]],
                         [
-                            cursor_pos[0] + PANEL_WIDTH as f32 * 1.5,
-                            cursor_pos[1] + PANEL_HEIGHT as f32 * 1.5,
+                            cursor_pos[0] + window_size[0] - 15.0,
+                            cursor_pos[1] + window_size[1] - 40.0,
                         ],
                     )
                     .build();

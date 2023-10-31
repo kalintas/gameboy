@@ -13,7 +13,7 @@ pub struct Cpu {
     pub ime: bool,
 
     halt_mode: bool,
-    // stop_mode: bool,
+    stop_mode: bool,
 }
 
 impl Cpu {
@@ -26,7 +26,7 @@ impl Cpu {
             ime: false,
 
             halt_mode: false,
-            // stop_mode: false,
+            stop_mode: false,
         }
     }
 
@@ -39,7 +39,7 @@ impl Cpu {
             ime: false,
 
             halt_mode: false,
-            // stop_mode: false,
+            stop_mode: false,
         }
     }
 
@@ -50,7 +50,7 @@ impl Cpu {
 
         // TODO: https://gbdev.io/pandocs/halt.html?highlight=halt#halt-bug
         // In halt mode CPU is powered down until an interrupt occurs.
-        if self.halt_mode {
+        if self.halt_mode || self.stop_mode {
             return;
         }
 
@@ -119,6 +119,7 @@ impl Cpu {
         if let Some((interrupt_address, new_if_reg)) = self.handle_interrupt(&memory_map) {
             // Halt mode is disabled regardless of whether the interrupt is handled or not.
             self.halt_mode = false;
+            self.stop_mode = false;
 
             if !self.ime {
                 return false;
@@ -160,19 +161,33 @@ impl Cpu {
         self.registers.set_flags(
             (self.registers.a == 0) as u8,
             0,
-            (lhs & 0xF + rhs & 0xF > 0xF) as u8,
+            ((lhs & 0xF) + (rhs & 0xF) > 0xF) as u8,
             ((lhs as u16 + rhs as u16) > 0xFF) as u8,
         );
     }
 
     pub fn adc(&mut self, rhs: u8) {
-        self.add(rhs.wrapping_add(self.registers.get_cy()));
+        let cy = self.registers.get_cy(); // Get the carry flag
+        let lhs = self.registers.a; // Get the value in register A
+    
+        // Perform the addition with carry
+        let result = lhs.wrapping_add(rhs).wrapping_add(cy);
+    
+        // Set the flags
+        self.registers.set_flags(
+            (result == 0) as u8,                      // Zero flag (Z)
+            0,                            // Subtraction flag (N) is cleared
+            ((lhs & 0x0F) + (rhs & 0x0F) + cy > 0x0F) as u8,  // Half carry flag (H)
+            ((lhs as u16 + rhs as u16 + cy as u16) > 0xFF) as u8, // Carry flag (C)
+        );
+    
+        // Store the result in register A
+        self.registers.a = result;
     }
 
     pub fn add_u16(&mut self, rhs: u16) {
         let lhs = self.registers.hl();
-        self.registers
-            .set_hl(self.registers.hl().wrapping_add(rhs) as u16);
+        self.registers.set_hl(lhs.wrapping_add(rhs) as u16);
 
         self.registers.set_flags(
             self.registers.get_z(),
@@ -197,7 +212,22 @@ impl Cpu {
     }
 
     pub fn sbc(&mut self, rhs: u8) {
-        self.sub(rhs.wrapping_add(self.registers.get_cy()));
+        let cy = self.registers.get_cy(); // Get the carry flag
+        let lhs = self.registers.a; // Get the value in register A
+    
+        // Perform the subtraction with carry
+        let result = lhs.wrapping_sub(rhs).wrapping_sub(cy);
+    
+        // Set the flags
+        self.registers.set_flags(
+            (result == 0) as u8,                             // Zero flag (Z)
+            1,                                               // Subtraction flag (N) is set
+            ((lhs & 0x0F) < (rhs & 0x0F) + cy) as u8,        // Half carry flag (H)
+            ((lhs as u16) < (rhs as u16 + cy as u16)) as u8, // Carry flag (C)
+        );
+    
+        // Store the result in register A
+        self.registers.a = result;
     }
 
     pub fn and(&mut self, rhs: u8) {
@@ -234,7 +264,7 @@ impl Cpu {
         self.registers.set_flags(
             (result == 0) as u8,
             0,
-            (val & 0xF + 1 > 0xF) as u8,
+            ((val & 0xF) + 1 > 0xF) as u8,
             self.registers.get_cy(),
         );
         result
@@ -252,7 +282,7 @@ impl Cpu {
         self.registers.set_flags(
             (result == 0) as u8,
             1,
-            ((val & 0x10) != 0 && (result & 0x10) == 0) as u8,
+            (val & 0x10 != result & 0x10) as u8,
             self.registers.get_cy(),
         );
         result
@@ -369,7 +399,7 @@ impl Cpu {
     //     self.stop_mode = true;
     // }
 
-    // pub fn is_stopped(&self) -> bool {
-    //     self.stop_mode
-    // }
+    pub fn is_stopped(&self) -> bool {
+        self.stop_mode
+    }
 }

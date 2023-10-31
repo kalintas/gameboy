@@ -161,6 +161,12 @@ impl Renderer {
         false
     }
 
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.window.set_size(width, height).unwrap();
+        self.window_width = width;
+        self.window_height = height;
+    }
+
     pub fn clear_screen(&mut self) {
         gl_call!(gl::Clear(gl::COLOR_BUFFER_BIT));
         gl_call!(gl::ClearColor(0.0, 0.0, 0.0, 1.0));

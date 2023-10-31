@@ -118,10 +118,32 @@ impl Emulator {
     }
 
     fn increment_tima(&mut self) {
+        /*
+            FF07 - TAC - Timer Control (R/W)
+            Bit 2    - Timer Stop  (0=Stop, 1=Start)
+            Bits 1-0 - Input Clock Select
+                00:   4096 Hz    (~4194 Hz SGB)
+                01: 262144 Hz  (~268400 Hz SGB)
+                10:  65536 Hz   (~67110 Hz SGB)
+                11:  16384 Hz   (~16780 Hz SGB)
+        */
         let tac = self.memory_map.get_io(Io::TAC);
+
+        let timer_clock = match tac & 0x3 {
+            0 => 4096,
+            1 => 262144,
+            2 => 65536,
+            3 => 16384,
+            _ => unreachable!(),
+        };
 
         // Check if the timer is stopped.
         if tac & 0x4 != 0 {
+
+            if self.base_clock % (CPU_CLOCK_RATE / timer_clock) != 0 {
+                return;
+            }
+
             // Calculate the new timer value.
             let tima = self.memory_map.get_io(Io::TIMA);
 
@@ -147,27 +169,9 @@ impl Emulator {
     /// Function tries to do a complete emulation such as running Cpu, Ppu and counting timers such as DIV and TIMA.
     fn cycle_impl<T: Fn(u16) -> bool>(&mut self, base_clock_cycles: u32, on_change: Option<T>) {
         // Handle timers.
-        /*
-            FF07 - TAC - Timer Control (R/W)
-            Bit 2    - Timer Stop  (0=Stop, 1=Start)
-            Bits 1-0 - Input Clock Select
-                00:   4096 Hz    (~4194 Hz SGB)
-                01: 262144 Hz  (~268400 Hz SGB)
-                10:  65536 Hz   (~67110 Hz SGB)
-                11:  16384 Hz   (~16780 Hz SGB)
-        */
 
         // Reset the triggered watch variable every cycle.
         self.memory_map.triggered_watch = None;
-
-        let tac = self.memory_map.get_io(Io::TAC);
-        let timer_clock = match tac & 0x3 {
-            0 => 4096,
-            1 => 262144,
-            2 => 65536,
-            3 => 16384,
-            _ => unreachable!(),
-        };
 
         self.base_clock = self.base_clock % CPU_CLOCK_RATE;
         self.ppu.clock_cycles = self.ppu.clock_cycles % ppu::PPU_ONE_FRAME;
@@ -178,18 +182,19 @@ impl Emulator {
         while self.base_clock - start_base_clock < base_clock_cycles {
             self.update_joypad();
 
-            if self.base_clock % (CPU_CLOCK_RATE / timer_clock) == 0 {
+            if !self.cpu.is_stopped() {
+
                 self.increment_tima();
-            }
+    
+                if self.base_clock % (CPU_CLOCK_RATE / DIV_REGISTER_CLOCK_RATE) == 0 {
+                    self.memory_map.increment_div();
+                }
 
-            if self.base_clock % (CPU_CLOCK_RATE / DIV_REGISTER_CLOCK_RATE) == 0 {
-                self.memory_map.increment_div();
+                self.ppu.cycle(
+                    &mut self.memory_map,
+                    (ppu::PPU_CLOCK_RATE * 4) / CPU_CLOCK_RATE,
+                );
             }
-
-            self.ppu.cycle(
-                &mut self.memory_map,
-                (ppu::PPU_CLOCK_RATE * 4) / CPU_CLOCK_RATE,
-            );
 
             // We check each time if the cpu clock is lower than base clock.
             // This is done because Cpu instructions have different instruction latencies.
@@ -212,6 +217,11 @@ impl Emulator {
                         self.memory_map.on_dma_transfer = true;
                     }
                 }
+
+                // defa
+                // if cpu::Cpu::decode(self.cpu.pc, &self.memory_map).name == "SBC A,d8" {
+                //     self.memory_map.triggered_watch = Some(0);
+                // }
 
                 self.cpu.cycle(&mut self.memory_map);
 
@@ -246,10 +256,17 @@ impl Emulator {
     }
 
     #[allow(dead_code)]
-    pub fn cycle<T: Fn(u16) -> bool>(&mut self, elapsed_time: f32, on_change: Option<T>) {
+    pub fn debug_cycle<T: Fn(u16) -> bool>(&mut self, elapsed_time: f32, on_change: T) {
         let base_clock_cycles = (CPU_CLOCK_RATE as f32 * elapsed_time) as u32;
 
-        self.cycle_impl(base_clock_cycles, on_change)
+        self.cycle_impl(base_clock_cycles, Some(on_change))
+    }
+
+    #[allow(dead_code)]
+    pub fn cycle(&mut self, elapsed_time: f32) {
+        let base_clock_cycles = (CPU_CLOCK_RATE as f32 * elapsed_time) as u32;
+
+        self.cycle_impl::<fn(u16) -> bool>(base_clock_cycles, None);
     }
 
     #[allow(dead_code)]

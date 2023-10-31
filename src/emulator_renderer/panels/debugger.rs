@@ -151,9 +151,9 @@ impl DebuggerPanel {
             let now = Instant::now();
             let elapsed_time = (now - self.clock_timer).as_secs_f32();
 
-            emulator.cycle(
+            emulator.debug_cycle(
                 elapsed_time,
-                Some(|pc| self.breakpoints.iter().any(|point| point.pointer == pc)),
+                |pc| self.breakpoints.iter().any(|point| point.pointer == pc),
             );
 
             if emulator.memory_map.triggered_watch.is_some() {
