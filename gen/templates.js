@@ -47,11 +47,9 @@ ${prefixCBInstructions}
 }
 
 function instructionFunctionFile(instructionFunctions) {
-    return`
-#![allow(dead_code, unused_variables)]
-use crate::emulator::Cpu;
+    return`#![allow(dead_code, unused_variables)]
 use crate::emulator::memory_map::MemoryMap;
-
+use crate::emulator::Cpu;
 ${instructionFunctions}`
 }
 
@@ -64,7 +62,7 @@ function instructionFunction(opcode, name, lengthInBytes, durationInCycles, flag
 /// ${name} - 0x${opcode} <br>
 ///  Length in bytes: ${lengthInBytes} <br>
 ///  Duration in cycles: ${durationInCycles} <br>
-///  Flags affected: ${flagsAffected} 
+///  Flags affected: ${flagsAffected}
 pub fn ${functionName}(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     ${returningCycle}
 }\n`

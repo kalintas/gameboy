@@ -149,7 +149,7 @@ impl DebuggerPanel {
 
         if self.toggled_breakpoint.is_none() {
             let now = Instant::now();
-            let elapsed_time = (now - self.clock_timer).as_secs_f32();
+            let elapsed_time = now - self.clock_timer;
 
             emulator.debug_cycle(
                 elapsed_time,

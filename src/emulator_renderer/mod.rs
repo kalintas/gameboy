@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::Instant;
 
 use crate::emulator::{ppu, self};
@@ -15,6 +17,7 @@ use sdl2::keyboard::Scancode;
 
 pub struct EmulatorRenderer {
     running: bool,
+    current_rom_path: PathBuf,
 
     panels: Panels,
 
@@ -28,6 +31,7 @@ impl EmulatorRenderer {
 
         Self {
             running: true,
+            current_rom_path: PathBuf::from_str("./roms/test/blargg_instr_timing.gb").unwrap(),
 
             panels,
             renderer,
@@ -39,7 +43,7 @@ impl EmulatorRenderer {
         // let emulator = &mut emulator::Emulator::new("./roms/boot/dmg_boot.gb");
         let emulator = &mut emulator::Emulator::after_boot();
 
-        emulator.load_cartidge("./roms/test/blargg_cpu_instrs.gb");
+        emulator.load_cartidge(&self.current_rom_path);
         
         self.panels.debugger.pause(emulator);
 
@@ -136,14 +140,15 @@ impl EmulatorRenderer {
 
                             if let Some(file_path) = file {
                                 *emulator = Emulator::after_boot();
-                                emulator.load_cartidge(file_path);
+                                emulator.load_cartidge(&file_path);
+                                self.current_rom_path = file_path;
                                 reset_emulator = true;
                             }
                         }
 
                         if ui.menu_item("Reload Cartidage") {
                             *emulator = Emulator::after_boot();
-                            emulator.load_cartidge("./roms/tetris.gb");
+                            emulator.load_cartidge(&self.current_rom_path);
                             reset_emulator = true;
                         }
 
@@ -245,7 +250,7 @@ impl EmulatorRenderer {
             );
 
             let now = Instant::now();
-            let elapsed_time = (now - timer).as_secs_f32();
+            let elapsed_time = now - timer;
             emulator.cycle(elapsed_time);
             timer = now;
 

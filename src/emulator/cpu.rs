@@ -78,7 +78,8 @@ impl Cpu {
 
         let instruction_cycles = (instruction.function)(self, memory_map) as u32;
 
-        self.clock_cycles = self.clock_cycles.wrapping_add(instruction_cycles);
+        self.clock_cycles += instruction_cycles;
+        // self.clock_cycles = self.clock_cycles.wrapping_add(instruction_cycles);
     }
 
     fn handle_interrupt(&self, memory_map: &MemoryMap) -> Option<(u16, u8)> {

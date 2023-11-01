@@ -5,7 +5,7 @@ pub mod memory_map;
 pub mod ppu;
 mod registers;
 
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
 use cpu::Cpu;
 use memory_map::MemoryMap;
@@ -72,6 +72,10 @@ pub struct Emulator {
     pub memory_map: MemoryMap,
 
     base_clock: u32,
+    // Cpu clock cycles are different in latency. 
+    // So we need a variable to store remainder cpu cycles after an emulator cycle.
+    remainder_cpu_cycles: u32, 
+
     dma_transfer_start: Option<u32>,
 
     joypad_keys: JoypadKeys,
@@ -87,6 +91,8 @@ impl Emulator {
             memory_map: MemoryMap::new(),
 
             base_clock: 0,
+            remainder_cpu_cycles: 0,
+
             dma_transfer_start: None,
 
             joypad_keys: JoypadKeys::NONE,
@@ -106,6 +112,8 @@ impl Emulator {
             memory_map: MemoryMap::after_boot(),
 
             base_clock: 0,
+            remainder_cpu_cycles: 0,
+
             dma_transfer_start: None,
 
             joypad_keys: JoypadKeys::NONE,
@@ -198,8 +206,7 @@ impl Emulator {
 
             // We check each time if the cpu clock is lower than base clock.
             // This is done because Cpu instructions have different instruction latencies.
-            if self.cpu.clock_cycles - start_cpu_clock_cycles <= self.base_clock - start_base_clock
-            {
+            if self.cpu.clock_cycles - start_cpu_clock_cycles + self.remainder_cpu_cycles <= self.base_clock - start_base_clock {
                 // Check if the DMA transfer is over.
                 if let Some(dma_start) = self.dma_transfer_start {
                     let diff = if dma_start > self.base_clock {
@@ -217,11 +224,6 @@ impl Emulator {
                         self.memory_map.on_dma_transfer = true;
                     }
                 }
-
-                // defa
-                // if cpu::Cpu::decode(self.cpu.pc, &self.memory_map).name == "SBC A,d8" {
-                //     self.memory_map.triggered_watch = Some(0);
-                // }
 
                 self.cpu.cycle(&mut self.memory_map);
 
@@ -250,21 +252,39 @@ impl Emulator {
                     }
                 }
             }
-
             self.base_clock += 4;
+        }
+        
+        /*
+            A brief description of the below algorithm:
+            Base clock: (Cycle start)  |  |  |  |  |  |  |  |  |  |        (End of cycle)
+            Cpu clock:  (Cycle start)  ---|-----|--------|--|-----------|  (End of cycle)
+                                       ^                           ^ Overworked cpu instruction in this emulator cycle.
+                                       Remainder cpu instruction from last emulator cycle.
+            Because that cpu instructions are wary in latency sometimes they overwork(run more than the base clock).
+            And then we store these overworked cycles and dont run the cpu until same amount of cycles passes.
+        */
+
+        let total_cpu_cycles = self.cpu.clock_cycles - start_cpu_clock_cycles + self.remainder_cpu_cycles;
+        let total_base_clock_cycles = self.base_clock - start_base_clock;
+
+        if total_cpu_cycles > total_base_clock_cycles {
+            self.remainder_cpu_cycles = total_cpu_cycles - total_base_clock_cycles; 
+        } else { 
+            self.remainder_cpu_cycles = 0;
         }
     }
 
     #[allow(dead_code)]
-    pub fn debug_cycle<T: Fn(u16) -> bool>(&mut self, elapsed_time: f32, on_change: T) {
-        let base_clock_cycles = (CPU_CLOCK_RATE as f32 * elapsed_time) as u32;
+    pub fn debug_cycle<T: Fn(u16) -> bool>(&mut self, elapsed_time: Duration, on_change: T) {
+        let base_clock_cycles = (CPU_CLOCK_RATE as f32 * elapsed_time.as_secs_f32()) as u32;
 
         self.cycle_impl(base_clock_cycles, Some(on_change))
     }
 
     #[allow(dead_code)]
-    pub fn cycle(&mut self, elapsed_time: f32) {
-        let base_clock_cycles = (CPU_CLOCK_RATE as f32 * elapsed_time) as u32;
+    pub fn cycle(&mut self, elapsed_time: Duration) {
+        let base_clock_cycles = (CPU_CLOCK_RATE as f32 * elapsed_time.as_secs_f32()) as u32;
 
         self.cycle_impl::<fn(u16) -> bool>(base_clock_cycles, None);
     }
@@ -273,6 +293,9 @@ impl Emulator {
     pub fn cycle_once(&mut self) {
         // Call the implementation function with the base clock's step cycle count.
         // This way emulator exactly does the smallest unit of emulation.
+
+        // Clear the remainder cpu cycles because this function should always call cpu.cycle().        
+        self.remainder_cpu_cycles = 0; // TODO: better implementation?
         // Rust requires a type to be passed on. So we pass a dummy function pointer.
         self.cycle_impl::<fn(u16) -> bool>(4, None)
     }

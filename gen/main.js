@@ -45,15 +45,22 @@ function processTable(tableId) {
 
                 const instructionName = match[1];
                 let lengthInBytes = match[2];
-                const durationInCycles = match[3];
+                let durationInCycles = match[3];
                 const flagsAffected = match[4];
-                
+
                 // https://stackoverflow.com/questions/41353869/length-of-instruction-ld-a-c-in-gameboy-z80-processor
-                // There is a error in the Pastraiser opcode table that is 
+                // There is an error in the Pastraiser opcode table that is 
                 // LD (C) A and LD A (C) instructions are written as 2 bytes long instead of 1. 
                 // Besides that STOP 0 instructions lengthInBytes also should be 1 explained above.
                 if (instructionName === "LD (C),A" || instructionName === "LD A,(C)" || instructionName === "STOP 0") {
                     lengthInBytes = 1;
+                }
+
+                // https://forums.nesdev.org/viewtopic.php?t=16621
+                // There is also an error in the BIT x, (HL) instructions. 
+                // They are written as 16 cycles long when it should be 12.
+                if (instructionName.match(/BIT [0-7],\(HL\)/)) {
+                    durationInCycles = "12";
                 }
 
                 const backgroundColor = row.cells[j].bgColor;
@@ -74,9 +81,9 @@ function processTable(tableId) {
 
                 instructionFunctions[instructionType] += instructionFunction(opcode, instructionName, lengthInBytes, durationInCycles, flagsAffected, functionName);
 
-                instructions += `    Instruction::new("${instructionName}", ${lengthInBytes}, ${instructionType}::${functionName}),\n`;
+                instructions += `    Instruction::new("${instructionName}", ${lengthInBytes}, ${instructionType}::${functionName}),\n\r`;
             } else {
-                instructions += '    UNDEFINED,\n'
+                instructions += '    UNDEFINED,\n\r'
             }
         }
     }
