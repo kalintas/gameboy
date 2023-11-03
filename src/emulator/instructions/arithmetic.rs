@@ -329,8 +329,12 @@ pub fn dec_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Flags affected: - 0 0 C
 pub fn ccf(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     // Complement carry flag.
-    cpu.registers
-        .set_flags(cpu.registers.get_z(), 0, 0, (cpu.registers.get_cy() == 0) as u8);
+    cpu.registers.set_flags(
+        cpu.registers.get_z(),
+        0,
+        0,
+        (cpu.registers.get_cy() == 0) as u8,
+    );
     4
 }
 

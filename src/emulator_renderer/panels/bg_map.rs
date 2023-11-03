@@ -27,7 +27,7 @@ pub struct BgMapPanel {
 }
 
 impl BgMapPanel {
-    pub fn new() -> Self { 
+    pub fn new() -> Self {
         Self {
             opened: false,
             first_run: false,

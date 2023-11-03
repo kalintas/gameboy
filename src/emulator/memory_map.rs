@@ -13,23 +13,31 @@ Memory map of the gameboy(from pandocs: http://bgb.bircd.org/pandocs.htm):
     FF80-FFFE   High RAM (HRAM)
     FFFF        Interrupt Enable Register
 */
-use std::{collections::HashMap, path::Path, ptr::copy_nonoverlapping, cell::UnsafeCell, marker::PhantomData};
 use memoffset::offset_of;
+use std::{
+    cell::UnsafeCell, collections::HashMap, marker::PhantomData, path::Path,
+    ptr::copy_nonoverlapping,
+};
 use strum_macros::{AsRefStr, EnumIter};
 
-use super::{mbc::{self, Mbc}, Emulator};
+use super::{
+    mbc::{self, Mbc},
+    Emulator,
+};
 
 pub trait SyncMem {
     fn sync(&mut self);
 }
 
 struct SyncToken<'a, T: SyncMem> {
-    mem_syncer: &'a MemSyncer<T>
+    mem_syncer: &'a MemSyncer<T>,
 }
 
 impl<'a, T: SyncMem> SyncToken<'a, T> {
     fn end_sync(self) {
-        unsafe { *self.mem_syncer.is_syncing.get() = *self.mem_syncer.old_is_syncing.get(); }
+        unsafe {
+            *self.mem_syncer.is_syncing.get() = *self.mem_syncer.old_is_syncing.get();
+        }
     }
 }
 
@@ -41,7 +49,6 @@ pub struct MemSyncer<T: SyncMem> {
 }
 
 impl<'a, T: SyncMem> MemSyncer<T> {
-
     // Creates a MemSyncer with given offset_address.
     // Parameter must be the offset address of the caller struct and its MemoryMap.
     pub fn new(offset_address: usize) -> Self {
@@ -62,22 +69,23 @@ impl<'a, T: SyncMem> MemSyncer<T> {
     }
 
     fn sync_start(&'a self) -> Option<SyncToken<'a, T>> {
-
         // TODO: Safety
         unsafe {
-
             if !*self.is_syncing.get() {
                 return None;
             }
-            
+
             *self.old_is_syncing.get() = *self.is_syncing.get();
             *self.is_syncing.get() = false;
 
             if let Some(offset_address) = self.offset_address {
-                (*((self as *const Self as *const u8).sub(offset_of!(MemoryMap, mem_syncer) + offset_address) as *mut T)).sync();
+                (*((self as *const Self as *const u8)
+                    .sub(offset_of!(MemoryMap, mem_syncer) + offset_address)
+                    as *mut T))
+                    .sync();
             }
 
-            Some(SyncToken{ mem_syncer: &self })
+            Some(SyncToken { mem_syncer: &self })
         }
     }
 }
@@ -94,13 +102,12 @@ impl<T: SyncMem> Default for MemSyncer<T> {
 }
 
 impl<T: SyncMem> Clone for MemSyncer<T> {
-
     fn clone(&self) -> Self {
         Self {
             phantom: PhantomData::default(),
             offset_address: self.offset_address,
             is_syncing: UnsafeCell::new(unsafe { *self.is_syncing.get() }),
-            old_is_syncing: UnsafeCell::new(unsafe { *self.old_is_syncing.get() })
+            old_is_syncing: UnsafeCell::new(unsafe { *self.old_is_syncing.get() }),
         }
     }
 }
@@ -320,9 +327,8 @@ impl MemoryMap {
     }
 
     pub fn set(&mut self, address: u16, mut value: u8) {
-        
         let sync_token = self.mem_syncer.sync_start();
-        
+
         let lcd_disabled = (self.get_io(Io::LCDC) & 0x80) == 0;
 
         let address = address as usize;
@@ -396,7 +402,7 @@ impl MemoryMap {
 
         self.changes.insert(address as u16, value);
 
-        if let Some(sync_token) = sync_token { 
+        if let Some(sync_token) = sync_token {
             sync_token.end_sync();
         }
     }
@@ -411,7 +417,7 @@ impl MemoryMap {
                 // CPU can access only HRAM (memory at FF80-FFFE) during DMA transfer.
                 return 0xFF;
             }
-    
+
             if address < self.boot_rom.len() {
                 return self.boot_rom[address];
             } else if address < 0x4000 {
@@ -453,12 +459,12 @@ impl MemoryMap {
             }
             if address < 0xFEA0 {
                 // FE00-FE9F   Sprite Attribute Table (OAM)
-    
+
                 if self.get_io(Io::STAT) & 0x2 != 0 {
                     // Ppu is in pixel transfer or OAM search mode.
                     return 0xFF;
                 }
-    
+
                 return self.oam[address - 0xFE00];
             }
             if address < 0xFF00 {
@@ -472,11 +478,11 @@ impl MemoryMap {
             if address < 0xFFFF {
                 return self.high_ram[address - 0xFF80];
             }
-    
+
             return self.ier;
         })();
 
-        if let Some(sync_token) = sync_token { 
+        if let Some(sync_token) = sync_token {
             sync_token.end_sync();
         }
 

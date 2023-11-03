@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Instant;
 
-use crate::emulator::{ppu, self};
+use crate::emulator::{self, ppu};
 
 use self::panels::Panels;
 
@@ -39,12 +39,11 @@ impl EmulatorRenderer {
     }
 
     pub fn run(&mut self) {
-
         // let emulator = &mut emulator::Emulator::new("./roms/boot/dmg_boot.gb");
         let emulator = &mut emulator::Emulator::after_boot();
 
         emulator.load_cartidge(&self.current_rom_path);
-        
+
         self.panels.debugger.pause(emulator);
 
         let framebuffer = Framebuffer::new();
@@ -52,7 +51,6 @@ impl EmulatorRenderer {
         let mut seconds_timer = Instant::now();
 
         while self.running && !self.renderer.poll_events() {
-            
             // Process events.
             let keyboard_state = self.renderer.event_pump.keyboard_state();
 
@@ -110,7 +108,7 @@ impl EmulatorRenderer {
                 (0, self.renderer.window_height as i32 - 19),
                 (
                     // (((ppu::SCREEN_WIDTH as f32) / (ppu::SCREEN_HEIGHT as f32)) * ((self.renderer.window_height as f32 - 19.0) * 0.5)) as i32
-                    self.renderer.window_width as i32 / 2, 
+                    self.renderer.window_width as i32 / 2,
                     (self.renderer.window_height as i32 - 19) / 2,
                 ),
             );
@@ -152,7 +150,9 @@ impl EmulatorRenderer {
                             reset_emulator = true;
                         }
 
-                        if ui.menu_item("Enter Game Mode        F11") || ui.is_key_down(imgui::Key::F11) {
+                        if ui.menu_item("Enter Game Mode        F11")
+                            || ui.is_key_down(imgui::Key::F11)
+                        {
                             enter_game_mode = true;
                         }
 
@@ -214,7 +214,7 @@ impl EmulatorRenderer {
                     break;
                 }
                 self.renderer.resize(width, height);
-                
+
                 // TOOD: memory_map
                 self.panels.debugger.pause(emulator);
             }
@@ -222,12 +222,11 @@ impl EmulatorRenderer {
     }
 
     fn run_game_mode(&mut self, emulator: &mut Emulator, framebuffer: &Framebuffer) {
-
         // Resize window.
         self.renderer.resize(400, 360);
 
         let mut timer = Instant::now();
-        
+
         while self.running && !self.renderer.poll_events() {
             // Process events.
             let keyboard_state = self.renderer.event_pump.keyboard_state();
@@ -255,7 +254,7 @@ impl EmulatorRenderer {
             timer = now;
 
             emulator.memory_map.changes.clear();
-            
+
             self.renderer.clear_screen();
 
             framebuffer.update_buffer(
@@ -269,14 +268,10 @@ impl EmulatorRenderer {
                 (0, 0),
                 (ppu::SCREEN_WIDTH as _, ppu::SCREEN_HEIGHT as _),
                 (0, self.renderer.window_height as i32),
-                (
-                    self.renderer.window_width as i32, 
-                    0,
-                ),
+                (self.renderer.window_width as i32, 0),
             );
-            
+
             self.renderer.render(|_| {});
         }
     }
-
 }

@@ -12,7 +12,7 @@ use memoffset::offset_of;
 use memory_map::MemoryMap;
 use ppu::Ppu;
 
-use self::memory_map::{Io, SyncMem, MemSyncer};
+use self::memory_map::{Io, MemSyncer, SyncMem};
 
 use std::ops::BitOr;
 
@@ -74,9 +74,9 @@ pub struct Emulator {
     pub memory_map: MemoryMap,
 
     base_clock: u32,
-    // Cpu clock cycles are different in latency. 
+    // Cpu clock cycles are different in latency.
     // So we need a variable to store remainder cpu cycles after an emulator cycle.
-    remainder_cpu_cycles: u32, 
+    remainder_cpu_cycles: u32,
 
     dma_transfer_start: Option<u32>,
 
@@ -150,7 +150,6 @@ impl Emulator {
 
         // Check if the timer is stopped.
         if tac & 0x4 != 0 {
-
             if self.base_clock % (CPU_CLOCK_RATE / timer_clock) != 0 {
                 return;
             }
@@ -177,7 +176,6 @@ impl Emulator {
     }
 
     fn update_peripherals(&mut self) {
-
         if self.cpu.is_stopped() {
             return;
         }
@@ -211,12 +209,13 @@ impl Emulator {
         let start_cpu_clock_cycles = self.cpu.clock_cycles;
 
         while self.base_clock - start_base_clock < base_clock_cycles {
-
             self.update_peripherals();
 
             // We check each time if the cpu clock is lower than base clock.
             // This is done because Cpu instructions have different instruction latencies.
-            if self.cpu.clock_cycles - start_cpu_clock_cycles + self.remainder_cpu_cycles <= self.base_clock - start_base_clock {
+            if self.cpu.clock_cycles - start_cpu_clock_cycles + self.remainder_cpu_cycles
+                <= self.base_clock - start_base_clock
+            {
                 // Check if the DMA transfer is over.
                 if let Some(dma_start) = self.dma_transfer_start {
                     let diff = if dma_start > self.base_clock {
@@ -264,7 +263,7 @@ impl Emulator {
             }
             self.base_clock += 4;
         }
-        
+
         /*
             A brief description of the below algorithm:
             Base clock: (Cycle start)  |  |  |  |  |  |  |  |  |  |        (End of cycle)
@@ -274,12 +273,13 @@ impl Emulator {
             Because that cpu instructions are wary in latency sometimes they overwork(run more than the base clock).
             And then we store these overworked cycles and dont run the cpu until same amount of cycles passes.
         */
-        let total_cpu_cycles = self.cpu.clock_cycles - start_cpu_clock_cycles + self.remainder_cpu_cycles;
+        let total_cpu_cycles =
+            self.cpu.clock_cycles - start_cpu_clock_cycles + self.remainder_cpu_cycles;
         let total_base_clock_cycles = self.base_clock - start_base_clock;
 
         if total_cpu_cycles > total_base_clock_cycles {
-            self.remainder_cpu_cycles = total_cpu_cycles - total_base_clock_cycles; 
-        } else { 
+            self.remainder_cpu_cycles = total_cpu_cycles - total_base_clock_cycles;
+        } else {
             self.remainder_cpu_cycles = 0;
         }
     }
@@ -303,7 +303,7 @@ impl Emulator {
         // Call the implementation function with the base clock's step cycle count.
         // This way emulator exactly does the smallest unit of emulation.
 
-        // Clear the remainder cpu cycles because this function should always call cpu.cycle().        
+        // Clear the remainder cpu cycles because this function should always call cpu.cycle().
         // self.remainder_cpu_cycles = 0; // TODO: better implementation?
         // Rust requires a type to be passed on. So we pass a dummy function pointer.
         self.cycle_impl::<fn(u16) -> bool>(4, None)
@@ -343,9 +343,7 @@ impl Emulator {
 }
 
 impl SyncMem for Emulator {
-
     fn sync(&mut self) {
-
         self.base_clock += 4;
         self.update_peripherals();
     }

@@ -144,7 +144,7 @@ struct PixelFetcher {
     fetching_object: Option<Object>,
     hit_object: bool, // This is must be set to true in case of an sprite hit.
 
-    is_window: bool,    
+    is_window: bool,
 
     mode: PixelFetcherMode,
 }
@@ -178,7 +178,7 @@ impl PixelFetcher {
         let ly = memory_map.get_io(Io::LY) as u16;
 
         let bg_tile_map_start = if lcdc & 0x8 == 0 { 0x9800 } else { 0x9C00 };
-        let w_tile_map_start = if lcdc & 0x40 == 0 { 0x9800 } else { 0x9C00 };        
+        let w_tile_map_start = if lcdc & 0x40 == 0 { 0x9800 } else { 0x9C00 };
 
         let bg_w_tile_data_start = if lcdc & 0x10 == 0 {
             0x9000 // Although it says 8800, if this is the case, patterns have signed numbers from -128 to 127.
@@ -321,7 +321,6 @@ impl PixelFetcher {
                     // Push transparent pixels with lowest priority.
                     oam_fifo.push(tile, source, (object.attributes >> 7) as u16);
                 } else {
-
                     let source = if self.is_window {
                         PixelFifo::WINDOW_PIXEL
                     } else {

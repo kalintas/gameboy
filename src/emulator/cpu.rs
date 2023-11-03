@@ -180,18 +180,18 @@ impl Cpu {
     pub fn adc(&mut self, rhs: u8) {
         let cy = self.registers.get_cy(); // Get the carry flag
         let lhs = self.registers.a; // Get the value in register A
-    
+
         // Perform the addition with carry
         let result = lhs.wrapping_add(rhs).wrapping_add(cy);
-    
+
         // Set the flags
         self.registers.set_flags(
-            (result == 0) as u8,                      // Zero flag (Z)
-            0,                            // Subtraction flag (N) is cleared
-            ((lhs & 0x0F) + (rhs & 0x0F) + cy > 0x0F) as u8,  // Half carry flag (H)
+            (result == 0) as u8,                                  // Zero flag (Z)
+            0,                                                    // Subtraction flag (N) is cleared
+            ((lhs & 0x0F) + (rhs & 0x0F) + cy > 0x0F) as u8,      // Half carry flag (H)
             ((lhs as u16 + rhs as u16 + cy as u16) > 0xFF) as u8, // Carry flag (C)
         );
-    
+
         // Store the result in register A
         self.registers.a = result;
     }
@@ -225,10 +225,10 @@ impl Cpu {
     pub fn sbc(&mut self, rhs: u8) {
         let cy = self.registers.get_cy(); // Get the carry flag
         let lhs = self.registers.a; // Get the value in register A
-    
+
         // Perform the subtraction with carry
         let result = lhs.wrapping_sub(rhs).wrapping_sub(cy);
-    
+
         // Set the flags
         self.registers.set_flags(
             (result == 0) as u8,                             // Zero flag (Z)
@@ -236,7 +236,7 @@ impl Cpu {
             ((lhs & 0x0F) < (rhs & 0x0F) + cy) as u8,        // Half carry flag (H)
             ((lhs as u16) < (rhs as u16 + cy as u16)) as u8, // Carry flag (C)
         );
-    
+
         // Store the result in register A
         self.registers.a = result;
     }
