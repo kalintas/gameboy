@@ -31,7 +31,7 @@ impl EmulatorRenderer {
 
         Self {
             running: true,
-            current_rom_path: PathBuf::from_str("./roms/test/blargg_instr_timing.gb").unwrap(),
+            current_rom_path: PathBuf::from_str("./roms/test/blargg_mem_timing.gb").unwrap(),
 
             panels,
             renderer,

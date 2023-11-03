@@ -8,10 +8,11 @@ mod registers;
 use std::{path::Path, time::Duration};
 
 use cpu::Cpu;
+use memoffset::offset_of;
 use memory_map::MemoryMap;
 use ppu::Ppu;
 
-use self::memory_map::Io;
+use self::memory_map::{Io, SyncMem, MemSyncer};
 
 use std::ops::BitOr;
 
@@ -64,6 +65,7 @@ impl AsRef<str> for JoypadKeys {
     }
 }
 
+#[repr(C)]
 #[derive(Clone)]
 pub struct Emulator {
     pub cpu: Cpu,
@@ -123,6 +125,7 @@ impl Emulator {
     #[allow(dead_code)]
     pub fn load_cartidge(&mut self, path: impl AsRef<Path>) {
         self.memory_map.load_rom(path);
+        self.memory_map.mem_syncer = MemSyncer::new(offset_of!(Emulator, memory_map));
     }
 
     fn increment_tima(&mut self) {
@@ -173,6 +176,26 @@ impl Emulator {
         }
     }
 
+    fn update_peripherals(&mut self) {
+
+        if self.cpu.is_stopped() {
+            return;
+        }
+
+        self.update_joypad();
+
+        self.increment_tima();
+
+        if self.base_clock % (CPU_CLOCK_RATE / DIV_REGISTER_CLOCK_RATE) == 0 {
+            self.memory_map.increment_div();
+        }
+
+        self.ppu.cycle(
+            &mut self.memory_map,
+            (ppu::PPU_CLOCK_RATE * 4) / CPU_CLOCK_RATE,
+        );
+    }
+
     /// Parameter base_clock_cycles represents how much base cycles this function will take.
     /// Function tries to do a complete emulation such as running Cpu, Ppu and counting timers such as DIV and TIMA.
     fn cycle_impl<T: Fn(u16) -> bool>(&mut self, base_clock_cycles: u32, on_change: Option<T>) {
@@ -188,21 +211,8 @@ impl Emulator {
         let start_cpu_clock_cycles = self.cpu.clock_cycles;
 
         while self.base_clock - start_base_clock < base_clock_cycles {
-            self.update_joypad();
 
-            if !self.cpu.is_stopped() {
-
-                self.increment_tima();
-    
-                if self.base_clock % (CPU_CLOCK_RATE / DIV_REGISTER_CLOCK_RATE) == 0 {
-                    self.memory_map.increment_div();
-                }
-
-                self.ppu.cycle(
-                    &mut self.memory_map,
-                    (ppu::PPU_CLOCK_RATE * 4) / CPU_CLOCK_RATE,
-                );
-            }
+            self.update_peripherals();
 
             // We check each time if the cpu clock is lower than base clock.
             // This is done because Cpu instructions have different instruction latencies.
@@ -264,7 +274,6 @@ impl Emulator {
             Because that cpu instructions are wary in latency sometimes they overwork(run more than the base clock).
             And then we store these overworked cycles and dont run the cpu until same amount of cycles passes.
         */
-
         let total_cpu_cycles = self.cpu.clock_cycles - start_cpu_clock_cycles + self.remainder_cpu_cycles;
         let total_base_clock_cycles = self.base_clock - start_base_clock;
 
@@ -295,7 +304,7 @@ impl Emulator {
         // This way emulator exactly does the smallest unit of emulation.
 
         // Clear the remainder cpu cycles because this function should always call cpu.cycle().        
-        self.remainder_cpu_cycles = 0; // TODO: better implementation?
+        // self.remainder_cpu_cycles = 0; // TODO: better implementation?
         // Rust requires a type to be passed on. So we pass a dummy function pointer.
         self.cycle_impl::<fn(u16) -> bool>(4, None)
     }
@@ -330,5 +339,14 @@ impl Emulator {
             self.memory_map
                 .set_io(Io::IF, self.memory_map.get_io(Io::IF) | 0x10);
         }
+    }
+}
+
+impl SyncMem for Emulator {
+
+    fn sync(&mut self) {
+
+        self.base_clock += 4;
+        self.update_peripherals();
     }
 }

@@ -54,9 +54,19 @@ impl Cpu {
             return;
         }
 
-        let instruction = Self::decode(self.pc, &memory_map);
+        let instruction = {
+            let opcode = Self::fetch(self.pc, memory_map);
+            memory_map.mem_syncer.open_sync();
+
+            if opcode == 0xCB {
+                PREFIX_CB_INSTRUCTIONS[Self::fetch(self.pc + 1, memory_map) as usize]
+            } else {
+                INSTRUCTIONS[opcode as usize]
+            }
+        };
 
         self.execute(instruction, memory_map);
+        memory_map.mem_syncer.close_sync();
     }
 
     pub fn fetch(pc: u16, memory_map: &MemoryMap) -> u8 {

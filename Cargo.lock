@@ -132,9 +132,9 @@ checksum = "bd0c93bb4b0c6d9b77f4435b0ae98c24d17f1c45b2ff844c6151a07256ca923b"
 
 [[package]]
 name = "dyn-clone"
-version = "1.0.14"
+version = "1.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23d2f3407d9a573d666de4b5bdf10569d73ca9478087346697dcbae6244bfbcd"
+checksum = "545b22097d44f8a9581187cdf93de7a71e4722bf51200cfaba810865b49a495d"
 
 [[package]]
 name = "encoding_rs"
@@ -183,6 +183,7 @@ dependencies = [
  "imgui",
  "imgui-glow-renderer",
  "imgui-sdl2-support",
+ "memoffset 0.9.0",
  "rfd",
  "sdl2",
  "strum",
@@ -334,7 +335,7 @@ source = "git+https://github.com/imgui-rs/imgui-rs#0f655625b6225c36bc07c790da16d
 dependencies = [
  "glow",
  "imgui",
- "memoffset",
+ "memoffset 0.6.5",
 ]
 
 [[package]]
@@ -430,6 +431,15 @@ name = "memoffset"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
+dependencies = [
+ "autocfg",
+]
+
+[[package]]
+name = "memoffset"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a634b1c61a95585bd15607c6ab0c4e5b226e695ff2800ba0cdccddf208c406c"
 dependencies = [
  "autocfg",
 ]

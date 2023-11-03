@@ -81,9 +81,9 @@ function processTable(tableId) {
 
                 instructionFunctions[instructionType] += instructionFunction(opcode, instructionName, lengthInBytes, durationInCycles, flagsAffected, functionName);
 
-                instructions += `    Instruction::new("${instructionName}", ${lengthInBytes}, ${instructionType}::${functionName}),\n\r`;
+                instructions += `    Instruction::new("${instructionName}", ${lengthInBytes}, ${instructionType}::${functionName}),\n`;
             } else {
-                instructions += '    UNDEFINED,\n\r'
+                instructions += '    UNDEFINED,\n'
             }
         }
     }

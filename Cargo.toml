@@ -13,6 +13,7 @@ strum_macros = "0.25"
 rfd = "0.12.0"
 arrayvec = "0.7.4"
 dyn-clone = "1.0.14"
+memoffset = "0.9.0"
 
 [dependencies.sdl2]
 version = "0.34.5"

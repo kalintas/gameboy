@@ -13,10 +13,97 @@ Memory map of the gameboy(from pandocs: http://bgb.bircd.org/pandocs.htm):
     FF80-FFFE   High RAM (HRAM)
     FFFF        Interrupt Enable Register
 */
-use std::{collections::HashMap, path::Path, ptr::copy_nonoverlapping};
+use std::{collections::HashMap, path::Path, ptr::copy_nonoverlapping, cell::UnsafeCell, marker::PhantomData};
+use memoffset::offset_of;
 use strum_macros::{AsRefStr, EnumIter};
 
-use super::mbc::{self, Mbc};
+use super::{mbc::{self, Mbc}, Emulator};
+
+pub trait SyncMem {
+    fn sync(&mut self);
+}
+
+struct SyncToken<'a, T: SyncMem> {
+    mem_syncer: &'a MemSyncer<T>
+}
+
+impl<'a, T: SyncMem> SyncToken<'a, T> {
+    fn end_sync(self) {
+        unsafe { *self.mem_syncer.is_syncing.get() = *self.mem_syncer.old_is_syncing.get(); }
+    }
+}
+
+pub struct MemSyncer<T: SyncMem> {
+    phantom: PhantomData<T>,
+    offset_address: Option<usize>,
+    is_syncing: UnsafeCell<bool>,
+    old_is_syncing: UnsafeCell<bool>,
+}
+
+impl<'a, T: SyncMem> MemSyncer<T> {
+
+    // Creates a MemSyncer with given offset_address.
+    // Parameter must be the offset address of the caller struct and its MemoryMap.
+    pub fn new(offset_address: usize) -> Self {
+        Self {
+            phantom: PhantomData::default(),
+            offset_address: Some(offset_address),
+            is_syncing: UnsafeCell::new(false),
+            old_is_syncing: UnsafeCell::new(false),
+        }
+    }
+
+    pub fn open_sync(&mut self) {
+        *self.is_syncing.get_mut() = true;
+    }
+
+    pub fn close_sync(&mut self) {
+        *self.is_syncing.get_mut() = false;
+    }
+
+    fn sync_start(&'a self) -> Option<SyncToken<'a, T>> {
+
+        // TODO: Safety
+        unsafe {
+
+            if !*self.is_syncing.get() {
+                return None;
+            }
+            
+            *self.old_is_syncing.get() = *self.is_syncing.get();
+            *self.is_syncing.get() = false;
+
+            if let Some(offset_address) = self.offset_address {
+                (*((self as *const Self as *const u8).sub(offset_of!(MemoryMap, mem_syncer) + offset_address) as *mut T)).sync();
+            }
+
+            Some(SyncToken{ mem_syncer: &self })
+        }
+    }
+}
+
+impl<T: SyncMem> Default for MemSyncer<T> {
+    fn default() -> Self {
+        Self {
+            phantom: PhantomData::default(),
+            offset_address: None,
+            is_syncing: UnsafeCell::new(false),
+            old_is_syncing: UnsafeCell::new(false),
+        }
+    }
+}
+
+impl<T: SyncMem> Clone for MemSyncer<T> {
+
+    fn clone(&self) -> Self {
+        Self {
+            phantom: PhantomData::default(),
+            offset_address: self.offset_address,
+            is_syncing: UnsafeCell::new(unsafe { *self.is_syncing.get() }),
+            old_is_syncing: UnsafeCell::new(unsafe { *self.old_is_syncing.get() })
+        }
+    }
+}
 
 #[repr(u16)]
 #[allow(dead_code)]
@@ -79,6 +166,7 @@ pub enum Io {
     SVBK = 0xFF70,  // CGB Mode Only - WRAM Bank
 }
 
+#[repr(C)]
 #[derive(Clone)]
 pub struct MemoryMap {
     rom_banks: Vec<[u8; 0x4000]>, // 16KB rom banks that is 'in the cartridge'.
@@ -91,6 +179,8 @@ pub struct MemoryMap {
     ier: u8, // Interrupt Enable Register
 
     mbc: Box<dyn Mbc>,
+
+    pub mem_syncer: MemSyncer<Emulator>,
 
     pub boot_rom: Vec<u8>,
 
@@ -115,6 +205,8 @@ impl MemoryMap {
             ier: 0u8,
 
             mbc: Box::new(mbc::NoMbc) as Box<dyn Mbc>,
+
+            mem_syncer: MemSyncer::default(),
 
             boot_rom: Vec::new(),
 
@@ -228,6 +320,9 @@ impl MemoryMap {
     }
 
     pub fn set(&mut self, address: u16, mut value: u8) {
+        
+        let sync_token = self.mem_syncer.sync_start();
+        
         let lcd_disabled = (self.get_io(Io::LCDC) & 0x80) == 0;
 
         let address = address as usize;
@@ -300,78 +395,92 @@ impl MemoryMap {
         self.mbc.set(address as u16, value);
 
         self.changes.insert(address as u16, value);
+
+        if let Some(sync_token) = sync_token { 
+            sync_token.end_sync();
+        }
     }
 
     pub fn get(&self, address: u16) -> u8 {
+        let sync_token = self.mem_syncer.sync_start();
+
         let address = address as usize;
 
-        if self.on_dma_transfer && (address < 0xFF80 || address == 0xFFFF) {
-            // CPU can access only HRAM (memory at FF80-FFFE) during DMA transfer.
-            return 0xFF;
-        }
-
-        if address < self.boot_rom.len() {
-            return self.boot_rom[address];
-        } else if address < 0x4000 {
-            // 0000-3FFF   16KB ROM Bank 00
-            return self.rom_banks[0][address];
-        }
-        if address < 0x8000 {
-            // 4000-7FFF   16KB ROM Bank 01..NN
-            return self.rom_banks[self.mbc.get_rom_bank()][address - 0x4000];
-        }
-        if address < 0xA000 {
-            if self.get_io(Io::STAT) & 0x3 == 0x3 {
-                // Ppu is in pixel transfer mode.
+        let result = (|| {
+            if self.on_dma_transfer && (address < 0xFF80 || address == 0xFFFF) {
+                // CPU can access only HRAM (memory at FF80-FFFE) during DMA transfer.
                 return 0xFF;
             }
-            // 8000-9FFF   8KB Video RAM (VRAM)
-            return self.vrams[0][address - 0x8000];
-        }
-        if address < 0xC000 {
-            // A000-BFFF   8KB External RAM
-            if let Some(ram_bank) = self.mbc.get_ram_bank() {
-                if !self.external_ram.is_empty() {
-                    return self.external_ram[ram_bank][address - 0xA000];
+    
+            if address < self.boot_rom.len() {
+                return self.boot_rom[address];
+            } else if address < 0x4000 {
+                // 0000-3FFF   16KB ROM Bank 00
+                return self.rom_banks[0][address];
+            }
+            if address < 0x8000 {
+                // 4000-7FFF   16KB ROM Bank 01..NN
+                return self.rom_banks[self.mbc.get_rom_bank()][address - 0x4000];
+            }
+            if address < 0xA000 {
+                if self.get_io(Io::STAT) & 0x3 == 0x3 {
+                    // Ppu is in pixel transfer mode.
+                    return 0xFF;
                 }
+                // 8000-9FFF   8KB Video RAM (VRAM)
+                return self.vrams[0][address - 0x8000];
             }
-            return 0xFF;
-        }
-        if address < 0xD000 {
-            // C000-CFFF   4KB Work RAM Bank 0 (WRAM)
-            return self.wrams[0][address - 0xC000];
-        }
-        if address < 0xE000 {
-            // D000-DFFF   4KB Work RAM Bank 1
-            return self.wrams[1][address - 0xD000];
-        }
-        if address < 0xFE00 {
-            // E000-FDFF   Same as C000-DDFF (ECHO)
-            return self.get(address as u16 - 0x2000);
-        }
-        if address < 0xFEA0 {
-            // FE00-FE9F   Sprite Attribute Table (OAM)
-
-            if self.get_io(Io::STAT) & 0x2 != 0 {
-                // Ppu is in pixel transfer or OAM search mode.
+            if address < 0xC000 {
+                // A000-BFFF   8KB External RAM
+                if let Some(ram_bank) = self.mbc.get_ram_bank() {
+                    if !self.external_ram.is_empty() {
+                        return self.external_ram[ram_bank][address - 0xA000];
+                    }
+                }
                 return 0xFF;
             }
+            if address < 0xD000 {
+                // C000-CFFF   4KB Work RAM Bank 0 (WRAM)
+                return self.wrams[0][address - 0xC000];
+            }
+            if address < 0xE000 {
+                // D000-DFFF   4KB Work RAM Bank 1
+                return self.wrams[1][address - 0xD000];
+            }
+            if address < 0xFE00 {
+                // E000-FDFF   Same as C000-DDFF (ECHO)
+                return self.get(address as u16 - 0x2000);
+            }
+            if address < 0xFEA0 {
+                // FE00-FE9F   Sprite Attribute Table (OAM)
+    
+                if self.get_io(Io::STAT) & 0x2 != 0 {
+                    // Ppu is in pixel transfer or OAM search mode.
+                    return 0xFF;
+                }
+    
+                return self.oam[address - 0xFE00];
+            }
+            if address < 0xFF00 {
+                // FEA0-FEFF   Not Usable
+                return 0;
+            }
+            if address < 0xFF80 {
+                // FF00-FF7F   I/O Ports
+                return self.io_ports[address - 0xFF00];
+            }
+            if address < 0xFFFF {
+                return self.high_ram[address - 0xFF80];
+            }
+    
+            return self.ier;
+        })();
 
-            return self.oam[address - 0xFE00];
-        }
-        if address < 0xFF00 {
-            // FEA0-FEFF   Not Usable
-            return 0;
-        }
-        if address < 0xFF80 {
-            // FF00-FF7F   I/O Ports
-            return self.io_ports[address - 0xFF00];
-        }
-        if address < 0xFFFF {
-            return self.high_ram[address - 0xFF80];
+        if let Some(sync_token) = sync_token { 
+            sync_token.end_sync();
         }
 
-        return self.ier;
+        result
     }
 
     pub fn get_io(&self, address: Io) -> u8 {
@@ -397,6 +506,7 @@ impl MemoryMap {
         self.set(address as u16, value)
     }
 
+    // PPU I/O
     pub fn ppu_get_vram(&self, address: u16) -> u8 {
         /*
             At various times during PPU operation read access to VRAM is blocked and the value read is $FF:
