@@ -105,9 +105,9 @@ pub fn rlc_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: Z 0 0 C
 pub fn rlc_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.circular_shift_left(memory_map.get(cpu.registers.hl()), 1),
+        cpu.circular_shift_left(memory_map.cpu_get(cpu.registers.hl()), 1),
     );
     16
 }
@@ -180,9 +180,9 @@ pub fn rrc_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: Z 0 0 C
 pub fn rrc_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.circular_shift_right(memory_map.get(cpu.registers.hl()), 1),
+        cpu.circular_shift_right(memory_map.cpu_get(cpu.registers.hl()), 1),
     );
     16
 }
@@ -255,9 +255,9 @@ pub fn rl_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: Z 0 0 C
 pub fn rl_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.rotate_left_cy(memory_map.get(cpu.registers.hl()), 1),
+        cpu.rotate_left_cy(memory_map.cpu_get(cpu.registers.hl()), 1),
     );
     16
 }
@@ -330,9 +330,9 @@ pub fn rr_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: Z 0 0 C
 pub fn rr_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.rotate_right_cy(memory_map.get(cpu.registers.hl()), 1),
+        cpu.rotate_right_cy(memory_map.cpu_get(cpu.registers.hl()), 1),
     );
     16
 }
@@ -405,9 +405,9 @@ pub fn sla_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: Z 0 0 C
 pub fn sla_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.shift_left_arithmetic(memory_map.get(cpu.registers.hl())),
+        cpu.shift_left_arithmetic(memory_map.cpu_get(cpu.registers.hl())),
     );
     16
 }
@@ -480,9 +480,9 @@ pub fn sra_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: Z 0 0 0
 pub fn sra_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.shift_right_arithmetic(memory_map.get(cpu.registers.hl())),
+        cpu.shift_right_arithmetic(memory_map.cpu_get(cpu.registers.hl())),
     );
     16
 }
@@ -555,9 +555,9 @@ pub fn swap_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: Z 0 0 0
 pub fn swap_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.swap(memory_map.get(cpu.registers.hl())),
+        cpu.swap(memory_map.cpu_get(cpu.registers.hl())),
     );
     16
 }
@@ -630,9 +630,9 @@ pub fn srl_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: Z 0 0 C
 pub fn srl_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.shift_right_logical(memory_map.get(cpu.registers.hl())),
+        cpu.shift_right_logical(memory_map.cpu_get(cpu.registers.hl())),
     );
     16
 }
@@ -705,7 +705,7 @@ pub fn bit_0_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 12 <br>
 ///  Flags affected: Z 0 1 -
 pub fn bit_0_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.test_bit(memory_map.get(cpu.registers.hl()), 0);
+    cpu.test_bit(memory_map.cpu_get(cpu.registers.hl()), 0);
     12
 }
 
@@ -777,7 +777,7 @@ pub fn bit_1_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 12 <br>
 ///  Flags affected: Z 0 1 -
 pub fn bit_1_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.test_bit(memory_map.get(cpu.registers.hl()), 1);
+    cpu.test_bit(memory_map.cpu_get(cpu.registers.hl()), 1);
     12
 }
 
@@ -849,7 +849,7 @@ pub fn bit_2_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 12 <br>
 ///  Flags affected: Z 0 1 -
 pub fn bit_2_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.test_bit(memory_map.get(cpu.registers.hl()), 2);
+    cpu.test_bit(memory_map.cpu_get(cpu.registers.hl()), 2);
     12
 }
 
@@ -921,7 +921,7 @@ pub fn bit_3_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 12 <br>
 ///  Flags affected: Z 0 1 -
 pub fn bit_3_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.test_bit(memory_map.get(cpu.registers.hl()), 3);
+    cpu.test_bit(memory_map.cpu_get(cpu.registers.hl()), 3);
     12
 }
 
@@ -993,7 +993,7 @@ pub fn bit_4_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 12 <br>
 ///  Flags affected: Z 0 1 -
 pub fn bit_4_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.test_bit(memory_map.get(cpu.registers.hl()), 4);
+    cpu.test_bit(memory_map.cpu_get(cpu.registers.hl()), 4);
     12
 }
 
@@ -1065,7 +1065,7 @@ pub fn bit_5_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 12 <br>
 ///  Flags affected: Z 0 1 -
 pub fn bit_5_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.test_bit(memory_map.get(cpu.registers.hl()), 5);
+    cpu.test_bit(memory_map.cpu_get(cpu.registers.hl()), 5);
     12
 }
 
@@ -1137,7 +1137,7 @@ pub fn bit_6_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 12 <br>
 ///  Flags affected: Z 0 1 -
 pub fn bit_6_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.test_bit(memory_map.get(cpu.registers.hl()), 6);
+    cpu.test_bit(memory_map.cpu_get(cpu.registers.hl()), 6);
     12
 }
 
@@ -1209,7 +1209,7 @@ pub fn bit_7_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 12 <br>
 ///  Flags affected: Z 0 1 -
 pub fn bit_7_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.test_bit(memory_map.get(cpu.registers.hl()), 7);
+    cpu.test_bit(memory_map.cpu_get(cpu.registers.hl()), 7);
     12
 }
 
@@ -1281,9 +1281,9 @@ pub fn res_0_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn res_0_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.reset_bit(memory_map.get(cpu.registers.hl()), 0),
+        cpu.reset_bit(memory_map.cpu_get(cpu.registers.hl()), 0),
     );
     16
 }
@@ -1356,9 +1356,9 @@ pub fn res_1_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn res_1_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.reset_bit(memory_map.get(cpu.registers.hl()), 1),
+        cpu.reset_bit(memory_map.cpu_get(cpu.registers.hl()), 1),
     );
     16
 }
@@ -1431,9 +1431,9 @@ pub fn res_2_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn res_2_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.reset_bit(memory_map.get(cpu.registers.hl()), 2),
+        cpu.reset_bit(memory_map.cpu_get(cpu.registers.hl()), 2),
     );
     16
 }
@@ -1506,9 +1506,9 @@ pub fn res_3_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn res_3_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.reset_bit(memory_map.get(cpu.registers.hl()), 3),
+        cpu.reset_bit(memory_map.cpu_get(cpu.registers.hl()), 3),
     );
     16
 }
@@ -1581,9 +1581,9 @@ pub fn res_4_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn res_4_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.reset_bit(memory_map.get(cpu.registers.hl()), 4),
+        cpu.reset_bit(memory_map.cpu_get(cpu.registers.hl()), 4),
     );
     16
 }
@@ -1656,9 +1656,9 @@ pub fn res_5_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn res_5_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.reset_bit(memory_map.get(cpu.registers.hl()), 5),
+        cpu.reset_bit(memory_map.cpu_get(cpu.registers.hl()), 5),
     );
     16
 }
@@ -1731,9 +1731,9 @@ pub fn res_6_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn res_6_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.reset_bit(memory_map.get(cpu.registers.hl()), 6),
+        cpu.reset_bit(memory_map.cpu_get(cpu.registers.hl()), 6),
     );
     16
 }
@@ -1806,9 +1806,9 @@ pub fn res_7_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn res_7_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.reset_bit(memory_map.get(cpu.registers.hl()), 7),
+        cpu.reset_bit(memory_map.cpu_get(cpu.registers.hl()), 7),
     );
     16
 }
@@ -1881,9 +1881,9 @@ pub fn set_0_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn set_0_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.set_bit(memory_map.get(cpu.registers.hl()), 0),
+        cpu.set_bit(memory_map.cpu_get(cpu.registers.hl()), 0),
     );
     16
 }
@@ -1956,9 +1956,9 @@ pub fn set_1_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn set_1_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.set_bit(memory_map.get(cpu.registers.hl()), 1),
+        cpu.set_bit(memory_map.cpu_get(cpu.registers.hl()), 1),
     );
     16
 }
@@ -2031,9 +2031,9 @@ pub fn set_2_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn set_2_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.set_bit(memory_map.get(cpu.registers.hl()), 2),
+        cpu.set_bit(memory_map.cpu_get(cpu.registers.hl()), 2),
     );
     16
 }
@@ -2106,9 +2106,9 @@ pub fn set_3_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn set_3_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.set_bit(memory_map.get(cpu.registers.hl()), 3),
+        cpu.set_bit(memory_map.cpu_get(cpu.registers.hl()), 3),
     );
     16
 }
@@ -2181,9 +2181,9 @@ pub fn set_4_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn set_4_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.set_bit(memory_map.get(cpu.registers.hl()), 4),
+        cpu.set_bit(memory_map.cpu_get(cpu.registers.hl()), 4),
     );
     16
 }
@@ -2256,9 +2256,9 @@ pub fn set_5_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn set_5_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.set_bit(memory_map.get(cpu.registers.hl()), 5),
+        cpu.set_bit(memory_map.cpu_get(cpu.registers.hl()), 5),
     );
     16
 }
@@ -2331,9 +2331,9 @@ pub fn set_6_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn set_6_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.set_bit(memory_map.get(cpu.registers.hl()), 6),
+        cpu.set_bit(memory_map.cpu_get(cpu.registers.hl()), 6),
     );
     16
 }
@@ -2406,9 +2406,9 @@ pub fn set_7_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn set_7_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.set_bit(memory_map.get(cpu.registers.hl()), 7),
+        cpu.set_bit(memory_map.cpu_get(cpu.registers.hl()), 7),
     );
     16
 }

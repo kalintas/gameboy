@@ -1,4 +1,5 @@
 use arrayvec::ArrayVec;
+use strum_macros::AsRefStr;
 
 use super::memory_map::{Io, MemoryMap};
 
@@ -76,10 +77,10 @@ impl PixelFifo {
 
         self.pixel_count -= 1;
 
-        let pallete_index = memory_map.get(match source {
-            Self::BACKGROUND_PIXEL | Self::WINDOW_PIXEL => 0xFF47,
-            Self::OBJECT0_PIXEL => 0xFF48,
-            Self::OBJECT1_PIXEL => 0xFF49,
+        let pallete_index = memory_map.get_io(match source {
+            Self::BACKGROUND_PIXEL | Self::WINDOW_PIXEL => Io::BGP,
+            Self::OBJECT0_PIXEL => Io::OBP0,
+            Self::OBJECT1_PIXEL => Io::OBP1,
             _ => unreachable!(),
         });
 
@@ -348,7 +349,7 @@ impl PixelFetcher {
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, AsRefStr)]
 pub enum Mode {
     OamSearch = 2,
     PixelTransfer = 3,
@@ -363,6 +364,7 @@ pub struct Ppu {
     mode: Mode,
 
     enabled: bool,
+    is_first_frame: bool,
 
     pos_x: usize,
     scroll_x: u8,
@@ -385,6 +387,7 @@ impl Ppu {
             mode: Mode::OamSearch,
 
             enabled: false,
+            is_first_frame: true,
 
             pos_x: 0,
             scroll_x: 0,
@@ -434,8 +437,9 @@ impl Ppu {
             self.found_objects
                 .sort_by(|lhs, rhs| rhs.pos_x.cmp(&lhs.pos_x));
         }
-
+        
         self.clock_cycles += dots;
+        
         self.update_mode(memory_map);
     }
 
@@ -525,7 +529,12 @@ impl Ppu {
                     }
                 }
 
-                if self.pos_x >= 8 {
+                /*
+                    From pandocs:
+                    When re-enabling the LCD, the PPU will immediately start drawing again, 
+                        but the screen will stay blank during the first frame. 
+                */
+                if !self.is_first_frame && self.pos_x >= 8 {
                     self.screen_buffer[(self.pos_x - 8) + ly as usize * SCREEN_WIDTH] = color;
                 }
 
@@ -572,8 +581,17 @@ impl Ppu {
             }
         }
 
+        memory_map.current_oam_row = if line_remainder == 0 {
+            Some(1)
+        } else {
+            None
+        };
+
         let mode = match self.mode {
             Mode::OamSearch => {
+
+                memory_map.current_oam_row = Some(line_remainder as u16 / 4 + 1);
+
                 if line_remainder >= 80 {
                     self.pos_x = 0;
                     self.scroll_x = 0;
@@ -584,6 +602,7 @@ impl Ppu {
                     // Push a background tile that will never be on screen.
                     // This is done for rendering objects with x < 8.
                     self.fifo.push(0, PixelFifo::BACKGROUND_PIXEL, 0);
+
 
                     Mode::PixelTransfer
                 } else {
@@ -611,6 +630,8 @@ impl Ppu {
             }
             Mode::VBlank => {
                 if self.clock_cycles % PPU_ONE_FRAME == 0 {
+                    // Finished a frame.
+                    self.is_first_frame = false;
                     Mode::OamSearch
                 } else {
                     return;
@@ -659,26 +680,30 @@ impl Ppu {
                 // Reset ppu flags.
                 memory_map.set_io(Io::LY, 0);
                 memory_map.set_io(Io::STAT, 0);
+                self.clock_cycles = dots;
+                self.mode = Mode::OamSearch;
 
                 self.enabled = false;
+                self.is_first_frame = true;
             }
             return;
         }
 
         self.enabled = true;
-
+        
         assert_eq!(dots, 4);
         match self.mode {
             Mode::OamSearch => self.oam_search(memory_map, dots),
             Mode::PixelTransfer => self.pixel_transfer(memory_map, dots),
             Mode::HBlank => self.hblank(memory_map, dots),
             Mode::VBlank => self.vblank(memory_map, dots),
-        };
+        };        
     }
 
-    // pub fn get_mode(&self) -> Mode {
-    //     self.mode
-    // }
+    #[allow(dead_code)]
+    pub fn get_mode(&self) -> Mode {
+        self.mode
+    }
 
     pub fn get_color_pallete(pallete_index: u8) -> [u32; 4] {
         [

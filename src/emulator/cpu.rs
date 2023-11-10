@@ -1,6 +1,6 @@
 use super::{
     instructions::{Instruction, INSTRUCTIONS, PREFIX_CB_INSTRUCTIONS},
-    memory_map::{Io, MemoryMap},
+    memory_map::{Io, MemoryMap, OamCorruption},
     registers::Registers,
 };
 
@@ -70,7 +70,7 @@ impl Cpu {
     }
 
     pub fn fetch(pc: u16, memory_map: &MemoryMap) -> u8 {
-        memory_map.get(pc)
+        memory_map.cpu_get(pc)
     }
 
     pub fn decode(pc: u16, memory_map: &MemoryMap) -> Instruction {
@@ -101,8 +101,8 @@ impl Cpu {
             Bit 0 (V-Blank) having the highest priority, and Bit 4 (Joypad) having the lowest priority.
         */
 
-        let ie_reg = memory_map.get_io(Io::IE);
-        let if_reg = memory_map.get_io(Io::IF);
+        let ie_reg = memory_map.cpu_get_io(Io::IE);
+        let if_reg = memory_map.cpu_get_io(Io::IF);
         let interrupt = ie_reg & if_reg;
 
         if interrupt & 0x1 != 0 {
@@ -141,7 +141,7 @@ impl Cpu {
             self.call(memory_map, interrupt_address);
 
             // Replace the if flag.
-            memory_map.set_io(Io::IF, new_if_reg);
+            memory_map.cpu_set_io(Io::IF, new_if_reg);
 
             // TODO: "The entire routine should last a total of 5 M-cycles." 5 M-cycles =? 20
             self.clock_cycles = self.clock_cycles.wrapping_add(20);
@@ -156,19 +156,18 @@ impl Cpu {
 
     // Get immediate byte after an instruction.
     pub fn get_immediate_u8(&self, memory_map: &MemoryMap) -> u8 {
-        memory_map.get(self.pc - 1)
+        memory_map.cpu_get(self.pc - 1)
     }
 
     // Get immediate two bytes after an instruction.
     pub fn get_immediate_u16(&self, memory_map: &MemoryMap) -> u16 {
-        memory_map.get_u16(self.pc - 2)
+        memory_map.cpu_get_u16(self.pc - 2)
     }
 
     pub fn add(&mut self, rhs: u8) {
         let lhs = self.registers.a;
         self.registers.a = self.registers.a.wrapping_add(rhs);
 
-        // TODO: check H flag to see if its correct
         self.registers.set_flags(
             (self.registers.a == 0) as u8,
             0,
@@ -378,14 +377,32 @@ impl Cpu {
         val & !(1 << bit)
     }
 
-    pub fn call(&mut self, memory_map: &mut MemoryMap, address: u16) {
+    pub fn push(&mut self, memory_map: &mut MemoryMap, value: u16) {
+        memory_map.try_corrupt_oam(self.sp, OamCorruption::Read);
         self.sp -= 2;
-        memory_map.set_u16(self.sp, self.pc);
+        memory_map.cpu_set_u16(self.sp, value);
+    }
+
+    pub fn pop(&mut self, memory_map: &mut MemoryMap) -> u16 {
+
+        memory_map.disable_oam_corruption();
+        memory_map.try_corrupt_oam(self.sp, OamCorruption::IncDecRead);
+        let lsb = memory_map.cpu_get(self.sp) as u16; // Get the least significant byte
+        memory_map.try_corrupt_oam(self.sp + 1, OamCorruption::Read);
+        let msb = memory_map.cpu_get(self.sp + 1) as u16; // Get the most significant byte
+        memory_map.enable_oam_corruption();
+        
+        self.sp += 2;
+
+        lsb | (msb << 8)
+    }
+
+    pub fn call(&mut self, memory_map: &mut MemoryMap, address: u16) {
+        self.push(memory_map, self.pc);
         self.pc = address;
     }
 
     // Interrupts
-
     /*
         The effect of ei is delayed by one instruction.
         This means that ei followed immediately by di does not allow any interrupts between them.

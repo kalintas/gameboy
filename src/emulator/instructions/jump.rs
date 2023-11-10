@@ -133,9 +133,7 @@ pub fn ret_z(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn ret(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.pc = memory_map.get_u16(cpu.sp) as u16;
-    cpu.sp += 2;
-
+    cpu.pc = cpu.pop(memory_map);
     16
 }
 

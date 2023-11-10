@@ -15,7 +15,7 @@ Memory map of the gameboy(from pandocs: http://bgb.bircd.org/pandocs.htm):
 */
 use memoffset::offset_of;
 use std::{
-    cell::UnsafeCell, collections::HashMap, marker::PhantomData, path::Path,
+    cell::{UnsafeCell, RefCell}, collections::HashMap, marker::PhantomData, path::Path,
     ptr::copy_nonoverlapping,
 };
 use strum_macros::{AsRefStr, EnumIter};
@@ -29,18 +29,6 @@ pub trait SyncMem {
     fn sync(&mut self);
 }
 
-struct SyncToken<'a, T: SyncMem> {
-    mem_syncer: &'a MemSyncer<T>,
-}
-
-impl<'a, T: SyncMem> SyncToken<'a, T> {
-    fn end_sync(self) {
-        unsafe {
-            *self.mem_syncer.is_syncing.get() = *self.mem_syncer.old_is_syncing.get();
-        }
-    }
-}
-
 pub struct MemSyncer<T: SyncMem> {
     phantom: PhantomData<T>,
     offset_address: Option<usize>,
@@ -48,7 +36,7 @@ pub struct MemSyncer<T: SyncMem> {
     old_is_syncing: UnsafeCell<bool>,
 }
 
-impl<'a, T: SyncMem> MemSyncer<T> {
+impl<T: SyncMem> MemSyncer<T> {
     // Creates a MemSyncer with given offset_address.
     // Parameter must be the offset address of the caller struct and its MemoryMap.
     pub fn new(offset_address: usize) -> Self {
@@ -68,11 +56,11 @@ impl<'a, T: SyncMem> MemSyncer<T> {
         *self.is_syncing.get_mut() = false;
     }
 
-    fn sync_start(&'a self) -> Option<SyncToken<'a, T>> {
+    fn sync_start(&self) -> bool {
         // TODO: Safety
         unsafe {
             if !*self.is_syncing.get() {
-                return None;
+                return false;
             }
 
             *self.old_is_syncing.get() = *self.is_syncing.get();
@@ -85,7 +73,13 @@ impl<'a, T: SyncMem> MemSyncer<T> {
                     .sync();
             }
 
-            Some(SyncToken { mem_syncer: &self })
+            true
+        }
+    }
+
+    fn sync_end(&self) {
+        unsafe {
+            *self.is_syncing.get() = *self.old_is_syncing.get();
         }
     }
 }
@@ -110,6 +104,14 @@ impl<T: SyncMem> Clone for MemSyncer<T> {
             old_is_syncing: UnsafeCell::new(unsafe { *self.old_is_syncing.get() }),
         }
     }
+}
+
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OamCorruption {
+    Read,
+    Write,
+    IncDecRead,
 }
 
 #[repr(u16)]
@@ -176,11 +178,11 @@ pub enum Io {
 #[repr(C)]
 #[derive(Clone)]
 pub struct MemoryMap {
-    rom_banks: Vec<[u8; 0x4000]>, // 16KB rom banks that is 'in the cartridge'.
-    vrams: Vec<[u8; 0x2000]>,     // 8KB video rams(VRAM)
+    rom_banks: Vec<[u8; 0x4000]>,    // 16KB rom banks that is 'in the cartridge'.
+    vrams: Vec<[u8; 0x2000]>,        // 8KB video rams(VRAM)
     external_ram: Vec<[u8; 0x2000]>, // 8KB external ram that is'in the cartridge'.
-    wrams: Vec<[u8; 0x1000]>,     // 4KB work rams(WRAM)
-    oam: [u8; 0x100],             // Sprite Attribute Table(OAM)
+    wrams: Vec<[u8; 0x1000]>,        // 4KB work rams(WRAM)
+    oam: RefCell<[u8; 0x100]>,    // Sprite Attribute Table(OAM)
     io_ports: [u8; 0x80],
     high_ram: [u8; 0x7F],
     ier: u8, // Interrupt Enable Register
@@ -188,6 +190,9 @@ pub struct MemoryMap {
     mbc: Box<dyn Mbc>,
 
     pub mem_syncer: MemSyncer<Emulator>,
+
+    pub current_oam_row: Option<u16>, // Current row of the OAM in PPU.
+    oam_corruption_enabled: bool, // When set to true OAM corruptions will be disabled in cpu_get and cpu_set functions.
 
     pub boot_rom: Vec<u8>,
 
@@ -206,7 +211,7 @@ impl MemoryMap {
             vrams: Vec::new(),
             external_ram: Vec::new(),
             wrams: Vec::new(),
-            oam: [0u8; 0x100],
+            oam: RefCell::new([0u8; 0x100]),
             io_ports: [0u8; 0x80],
             high_ram: [0u8; 0x7F],
             ier: 0u8,
@@ -214,7 +219,9 @@ impl MemoryMap {
             mbc: Box::new(mbc::NoMbc) as Box<dyn Mbc>,
 
             mem_syncer: MemSyncer::default(),
-
+            current_oam_row: None,
+            oam_corruption_enabled: true,
+            
             boot_rom: Vec::new(),
 
             memory_watches: Vec::new(),
@@ -228,37 +235,37 @@ impl MemoryMap {
     pub fn after_boot() -> Self {
         let mut memory = Self::new();
 
-        memory.set_io(Io::TIMA, 0x00);
-        memory.set_io(Io::TMA, 0x00);
-        memory.set_io(Io::TAC, 0x00);
-        memory.set_io(Io::NR10, 0x80);
-        memory.set_io(Io::NR11, 0xBF);
-        memory.set_io(Io::NR12, 0xF3);
-        memory.set_io(Io::NR14, 0xBF);
-        memory.set_io(Io::NR21, 0x3F);
-        memory.set_io(Io::NR22, 0x00);
-        memory.set_io(Io::NR24, 0xBF);
-        memory.set_io(Io::NR30, 0x7F);
-        memory.set_io(Io::NR31, 0xFF);
-        memory.set_io(Io::NR32, 0x9F);
-        memory.set_io(Io::NR33, 0xBF);
-        memory.set_io(Io::NR41, 0xFF);
-        memory.set_io(Io::NR42, 0x00);
-        memory.set_io(Io::NR43, 0x00);
-        memory.set_io(Io::NR30, 0xBF);
-        memory.set_io(Io::NR50, 0x77);
-        memory.set_io(Io::NR51, 0xF3);
-        memory.set_io(Io::NR52, 0xF1);
-        memory.set_io(Io::LCDC, 0x91);
-        memory.set_io(Io::SCY, 0x00);
-        memory.set_io(Io::SCX, 0x00);
-        memory.set_io(Io::LYC, 0x00);
-        memory.set_io(Io::BGP, 0xFC);
-        memory.set_io(Io::OBP0, 0xFF);
-        memory.set_io(Io::OBP1, 0xFF);
-        memory.set_io(Io::WY, 0x00);
-        memory.set_io(Io::WX, 0x00);
-        memory.set_io(Io::IE, 0x00);
+        memory.cpu_set_io(Io::TIMA, 0x00);
+        memory.cpu_set_io(Io::TMA, 0x00);
+        memory.cpu_set_io(Io::TAC, 0x00);
+        memory.cpu_set_io(Io::NR10, 0x80);
+        memory.cpu_set_io(Io::NR11, 0xBF);
+        memory.cpu_set_io(Io::NR12, 0xF3);
+        memory.cpu_set_io(Io::NR14, 0xBF);
+        memory.cpu_set_io(Io::NR21, 0x3F);
+        memory.cpu_set_io(Io::NR22, 0x00);
+        memory.cpu_set_io(Io::NR24, 0xBF);
+        memory.cpu_set_io(Io::NR30, 0x7F);
+        memory.cpu_set_io(Io::NR31, 0xFF);
+        memory.cpu_set_io(Io::NR32, 0x9F);
+        memory.cpu_set_io(Io::NR33, 0xBF);
+        memory.cpu_set_io(Io::NR41, 0xFF);
+        memory.cpu_set_io(Io::NR42, 0x00);
+        memory.cpu_set_io(Io::NR43, 0x00);
+        memory.cpu_set_io(Io::NR30, 0xBF);
+        memory.cpu_set_io(Io::NR50, 0x77);
+        memory.cpu_set_io(Io::NR51, 0xF3);
+        memory.cpu_set_io(Io::NR52, 0xF1);
+        memory.cpu_set_io(Io::LCDC, 0x91);
+        memory.cpu_set_io(Io::SCY, 0x00);
+        memory.cpu_set_io(Io::SCX, 0x00);
+        memory.cpu_set_io(Io::LYC, 0x00);
+        memory.cpu_set_io(Io::BGP, 0xFC);
+        memory.cpu_set_io(Io::OBP0, 0xFF);
+        memory.cpu_set_io(Io::OBP1, 0xFF);
+        memory.cpu_set_io(Io::WY, 0x00);
+        memory.cpu_set_io(Io::WX, 0x00);
+        memory.cpu_set_io(Io::IE, 0x00);
 
         memory
     }
@@ -303,7 +310,7 @@ impl MemoryMap {
         self.changes.reserve(rom.len());
 
         for i in self.boot_rom.len() as u16..0x8000 {
-            self.changes.insert(i, self.get(i));
+            self.changes.insert(i, self.cpu_get(i));
         }
     }
 
@@ -322,31 +329,79 @@ impl MemoryMap {
         self.boot_rom.clear();
 
         for i in 0..boot_rom_length as u16 {
-            self.changes.insert(i, self.get(i));
+            self.changes.insert(i, self.cpu_get(i));
         }
     }
 
-    pub fn set(&mut self, address: u16, mut value: u8) {
-        let sync_token = self.mem_syncer.sync_start();
+    // General I/O. Can be used to get memory without any restriction.
+    pub fn get(&self, address: u16) -> u8 {
+        
+        let address = address as usize;
+        
+        if address < self.boot_rom.len() {
+            return self.boot_rom[address];
+        } else if address < 0x4000 {
+            // 0000-3FFF   16KB ROM Bank 00
+            return self.rom_banks[0][address];
+        }
+        if address < 0x8000 {
+            // 4000-7FFF   16KB ROM Bank 01..NN
+            return self.rom_banks[self.mbc.get_rom_bank()][address - 0x4000];
+        }
+        if address < 0xA000 {
+            // 8000-9FFF   8KB Video RAM (VRAM)
+            return self.vrams[0][address - 0x8000];
+        }
+        if address < 0xC000 {
+            // A000-BFFF   8KB External RAM
+            if let Some(ram_bank) = self.mbc.get_ram_bank() {
+                if !self.external_ram.is_empty() {
+                    return self.external_ram[ram_bank][address - 0xA000];
+                }
+            }
+            return 0xFF;
+        }
+        if address < 0xD000 {
+            // C000-CFFF   4KB Work RAM Bank 0 (WRAM)
+            return self.wrams[0][address - 0xC000];
+        }
+        if address < 0xE000 {
+            // D000-DFFF   4KB Work RAM Bank 1
+            return self.wrams[1][address - 0xD000];
+        }
+        if address < 0xFE00 {
+            // E000-FDFF   Same as C000-DDFF (ECHO)
+            return self.get(address as u16 - 0x2000);
+        }
+        if address < 0xFEA0 {
+            // FE00-FE9F   Sprite Attribute Table (OAM)
+            return self.oam.borrow()[address - 0xFE00];
+        }
+        if address < 0xFF00 {
+            // FEA0-FEFF   Not Usable
+            return 0;
+        }
+        if address < 0xFF80 {
+            // FF00-FF7F   I/O Ports
+            return self.io_ports[address - 0xFF00];
+        }
+        if address < 0xFFFF {
+            return self.high_ram[address - 0xFF80];
+        }
 
-        let lcd_disabled = (self.get_io(Io::LCDC) & 0x80) == 0;
+        return self.ier;
+    }
+
+    pub fn set(&mut self, address: u16, value: u8) {
 
         let address = address as usize;
-
-        if self.on_dma_transfer && (address < 0xFF80 || address == 0xFFFF) {
-            // CPU can access only HRAM (memory at FF80-FFFE) during DMA transfer.
-            return;
-        }
 
         if address < 0x8000 {
             // 0000-3FFF   16KB ROM Bank 00
             // 4000-7FFF   16KB ROM Bank 01..NN
         } else if address < 0xA000 {
             // 8000-9FFF   8KB Video RAM (VRAM)
-            if lcd_disabled || self.get_io(Io::STAT) & 0x3 != 0x3 {
-                // Ppu is not in pixel transfer mode.
-                self.vrams[0][address - 0x8000] = value;
-            }
+            self.vrams[0][address - 0x8000] = value;
         } else if address < 0xC000 {
             // A000-BFFF   8KB External RAM
             if let Some(ram_bank) = self.mbc.get_ram_bank() {
@@ -365,134 +420,28 @@ impl MemoryMap {
             return self.set(address as u16 - 0x2000, value);
         } else if address < 0xFEA0 {
             // FE00-FE9F   Sprite Attribute Table (OAM)
-            if lcd_disabled || self.get_io(Io::STAT) & 0x2 == 0 {
-                // Ppu is not in pixel transfer or OAM search mode.
-                self.oam[address - 0xFE00] = value;
-            }
+            self.oam.borrow_mut()[address - 0xFE00] = value;
         } else if address < 0xFF00 {
             // FEA0-FEFF   Not Usable
         } else if address < 0xFF80 {
             // FF00-FF7F   I/O Ports
-            if address == Io::DIV as _ {
-                // DIV: Divider register, writing any value to this register resets it to 0x00
-                value = 0;
-            } else if address == Io::DMA as _ {
-                // DMA: Writing to this register launches a DMA transfer
-                // It takes 640 cpu clock cycles for the DMA transfer to be complete.
-                self.dma_transfer(value);
-                return;
-            }
-
             self.io_ports[address - 0xFF00] = value;
         } else if address < 0xFFFF {
             self.high_ram[address - 0xFF80] = value;
         } else {
             self.ier = value;
         }
-
-        self.triggered_watch =
-            self.memory_watches
-                .iter()
-                .position(|&(watch_address, watch_value)| {
-                    watch_address == address as u16
-                        && watch_value.map_or(true, |watch_value| watch_value == value)
-                });
-
-        self.mbc.set(address as u16, value);
-
-        self.changes.insert(address as u16, value);
-
-        if let Some(sync_token) = sync_token {
-            sync_token.end_sync();
-        }
-    }
-
-    pub fn get(&self, address: u16) -> u8 {
-        let sync_token = self.mem_syncer.sync_start();
-
-        let address = address as usize;
-
-        let result = (|| {
-            if self.on_dma_transfer && (address < 0xFF80 || address == 0xFFFF) {
-                // CPU can access only HRAM (memory at FF80-FFFE) during DMA transfer.
-                return 0xFF;
-            }
-
-            if address < self.boot_rom.len() {
-                return self.boot_rom[address];
-            } else if address < 0x4000 {
-                // 0000-3FFF   16KB ROM Bank 00
-                return self.rom_banks[0][address];
-            }
-            if address < 0x8000 {
-                // 4000-7FFF   16KB ROM Bank 01..NN
-                return self.rom_banks[self.mbc.get_rom_bank()][address - 0x4000];
-            }
-            if address < 0xA000 {
-                if self.get_io(Io::STAT) & 0x3 == 0x3 {
-                    // Ppu is in pixel transfer mode.
-                    return 0xFF;
-                }
-                // 8000-9FFF   8KB Video RAM (VRAM)
-                return self.vrams[0][address - 0x8000];
-            }
-            if address < 0xC000 {
-                // A000-BFFF   8KB External RAM
-                if let Some(ram_bank) = self.mbc.get_ram_bank() {
-                    if !self.external_ram.is_empty() {
-                        return self.external_ram[ram_bank][address - 0xA000];
-                    }
-                }
-                return 0xFF;
-            }
-            if address < 0xD000 {
-                // C000-CFFF   4KB Work RAM Bank 0 (WRAM)
-                return self.wrams[0][address - 0xC000];
-            }
-            if address < 0xE000 {
-                // D000-DFFF   4KB Work RAM Bank 1
-                return self.wrams[1][address - 0xD000];
-            }
-            if address < 0xFE00 {
-                // E000-FDFF   Same as C000-DDFF (ECHO)
-                return self.get(address as u16 - 0x2000);
-            }
-            if address < 0xFEA0 {
-                // FE00-FE9F   Sprite Attribute Table (OAM)
-
-                if self.get_io(Io::STAT) & 0x2 != 0 {
-                    // Ppu is in pixel transfer or OAM search mode.
-                    return 0xFF;
-                }
-
-                return self.oam[address - 0xFE00];
-            }
-            if address < 0xFF00 {
-                // FEA0-FEFF   Not Usable
-                return 0;
-            }
-            if address < 0xFF80 {
-                // FF00-FF7F   I/O Ports
-                return self.io_ports[address - 0xFF00];
-            }
-            if address < 0xFFFF {
-                return self.high_ram[address - 0xFF80];
-            }
-
-            return self.ier;
-        })();
-
-        if let Some(sync_token) = sync_token {
-            sync_token.end_sync();
-        }
-
-        result
     }
 
     pub fn get_io(&self, address: Io) -> u8 {
         self.get(address as u16)
     }
+    
+    pub fn set_io(&mut self, address: Io, value: u8) {
+        self.set(address as u16, value)
+    }
 
+    #[allow(dead_code)]
     pub fn get_u16(&self, address: u16) -> u16 {
         let lsb = self.get(address) as u16; // Get the least significant byte
         let msb = self.get(address + 1) as u16; // Get the most significant byte
@@ -500,6 +449,7 @@ impl MemoryMap {
         (msb << 8) | lsb
     }
 
+    #[allow(dead_code)]
     pub fn set_u16(&mut self, address: u16, value: u16) {
         let lsb = (value & 0xFF) as u8; // Get the least significant byte
         let msb = ((value >> 8) & 0xFF) as u8; // Get the most significant byte
@@ -508,11 +458,126 @@ impl MemoryMap {
         self.set(address + 1, msb);
     }
 
-    pub fn set_io(&mut self, address: Io, value: u8) {
-        self.set(address as u16, value)
+    // CPU I/O.
+    pub fn cpu_set(&mut self, address: u16, mut value: u8) {
+        
+        let sync_start = self.mem_syncer.sync_start();
+
+        let lcd_disabled = (self.cpu_get_io(Io::LCDC) & 0x80) == 0;
+
+        if self.oam_corruption_enabled {
+            self.try_corrupt_oam(address, OamCorruption::Write);
+        }
+
+        let can_set = if self.on_dma_transfer && (address < 0xFF80 || address == 0xFFFF) {
+            // CPU can access only HRAM (memory at FF80-FFFE) during DMA transfer.
+            false
+        } else if address >= 0x8000 && address < 0xA000 { // VRAM
+            // Ppu is in pixel transfer mode.
+            lcd_disabled || self.cpu_get_io(Io::STAT) & 0x3 != 0x3
+        } else if address >= 0xFE00 && address < 0xFEA0 { // OAM
+            // Ppu is in pixel transfer or OAM search mode.
+            lcd_disabled || self.cpu_get_io(Io::STAT) & 0x2 == 0
+        } else if address == Io::DMA as _ {
+            // DMA: Writing to this register launches a DMA transfer
+            // It takes 640 cpu clock cycles for the DMA transfer to be complete.
+            self.dma_transfer(value);
+            false
+        } else {
+            true
+        };
+
+        if address == Io::DIV as _ {
+            // DIV: Divider register, writing any value to this register resets it to 0x00
+            value = 0;
+        }
+
+        if can_set {
+            self.set(address, value);
+            self.changes.insert(address as u16, value);
+        
+            self.triggered_watch =
+                self.memory_watches
+                    .iter()
+                    .position(|&(watch_address, watch_value)| {
+                        watch_address == address as u16
+                            && watch_value.map_or(true, |watch_value| watch_value == value)
+                    });
+        }
+
+        self.mbc.set(address as u16, value);
+
+        if sync_start {
+            self.mem_syncer.sync_end();
+        }
     }
 
-    // PPU I/O
+    pub fn cpu_get(&self, address: u16) -> u8 {
+        
+        let sync_start = self.mem_syncer.sync_start();
+
+        if self.oam_corruption_enabled {
+            self.try_corrupt_oam(address, OamCorruption::Read);
+        }
+
+        let mut value = self.get(address);
+
+        if self.on_dma_transfer && (address < 0xFF80 || address == 0xFFFF) {
+            // CPU can access only HRAM (memory at FF80-FFFE) during DMA transfer.
+            value = 0xFF;
+        }
+
+        if address >= 0x8000 && address < 0xA000 { // VRAM
+            if self.cpu_get_io(Io::STAT) & 0x3 == 0x3 {
+                // Ppu is in pixel transfer mode.
+                value = 0xFF;
+            }
+        } else if address >= 0xFE00 && address < 0xFEA0 { // OAM
+            if self.cpu_get_io(Io::STAT) & 0x2 != 0 {
+                // Ppu is in pixel transfer or OAM search mode.
+                value = 0xFF;
+            }
+        }
+
+        if sync_start {
+            self.mem_syncer.sync_end();
+        }
+
+        value
+    }
+
+    pub fn cpu_get_u16(&self, address: u16) -> u16 {
+        let lsb = self.cpu_get(address) as u16; // Get the least significant byte
+        let msb = self.cpu_get(address + 1) as u16; // Get the most significant byte
+
+        (msb << 8) | lsb
+    }
+
+    pub fn cpu_set_u16(&mut self, address: u16, value: u16) {
+        let lsb = (value & 0xFF) as u8; // Get the least significant byte
+        let msb = ((value >> 8) & 0xFF) as u8; // Get the most significant byte
+
+        self.cpu_set(address, lsb);
+        self.cpu_set(address + 1, msb);
+    }
+
+    pub fn enable_oam_corruption(&mut self) {
+        self.oam_corruption_enabled = true;
+    }
+
+    pub fn disable_oam_corruption(&mut self) {
+        self.oam_corruption_enabled = false;
+    }
+    
+    pub fn cpu_get_io(&self, address: Io) -> u8 {
+        self.cpu_get(address as u16)
+    }
+
+    pub fn cpu_set_io(&mut self, address: Io, value: u8) {
+        self.cpu_set(address as u16, value)
+    }
+
+    // PPU I/O.
     pub fn ppu_get_vram(&self, address: u16) -> u8 {
         /*
             At various times during PPU operation read access to VRAM is blocked and the value read is $FF:
@@ -522,8 +587,8 @@ impl MemoryMap {
             On CGB when searching OAM and index 37 is reached
         */
 
-        let lcdc = self.get_io(Io::LCDC);
-        let stat = self.get_io(Io::STAT);
+        let lcdc = self.cpu_get_io(Io::LCDC);
+        let stat = self.cpu_get_io(Io::STAT);
 
         if lcdc & 0x80 == 0 {
             // LCDC off
@@ -537,7 +602,7 @@ impl MemoryMap {
     }
 
     pub fn ppu_get_oam(&self, address: u16) -> u8 {
-        self.oam[address as usize - 0xFE00]
+        self.oam.borrow()[address as usize - 0xFE00]
     }
 
     pub unsafe fn get_vram(&self, address: u16) -> u8 {
@@ -560,9 +625,80 @@ impl MemoryMap {
         let source = (source as u16) << 8;
 
         for i in 0..0xA0 {
-            self.set(0xFE00 + i, self.get(source + i));
+            self.cpu_set(0xFE00 + i, self.cpu_get(source + i));
         }
 
         self.on_dma_transfer = true;
+    }
+
+    /*
+        There is a bug in the gameboy hardware called OAM Corruption Bug.
+        Any read or write to the OAM address space in OamSearch mode(Mode 2) will corrupt the OAM in a specific pattern.
+        Besides read/write of the memory, increment or decrement of a 16 bit integer will also corrupt the OAM 
+            if the value is in the OAM address space
+        More info is available in the pandocs:
+        // https://gbdev.io/pandocs/OAM_Corruption_Bug.html
+    */
+    pub fn try_corrupt_oam(&self, value: u16, mut corruption: OamCorruption) {        
+    
+        if !(value >= 0xFE00 && value < 0xFF00) {
+            // Not in OAM address spoace.
+            return;
+        }
+
+        let set_oam_u16 = |address: u16, value: u16| {
+
+            let address = address as usize - 0xFE00;
+
+            self.oam.borrow_mut()[address] = (value & 0xFF) as u8;
+            self.oam.borrow_mut()[address + 1] = (value >> 8)as u8;
+        };
+
+        if let Some(current_oam_row) = self.current_oam_row {
+
+            if corruption == OamCorruption::IncDecRead {
+
+                if current_oam_row < 20 {
+                    let start = 0xFE00 + (current_oam_row - 1) as u16 * 8;
+        
+                    let a = self.get_u16(start - 8); // First word two rows before the currently accessed row.
+                    let b = self.get_u16(start);     // First word in the preceding row (the word being corrupted).
+                    let c = self.get_u16(start + 8); // First word in the currently accessed row.
+                    let d = self.get_u16(start + 4); // Third word in the preceding row.
+        
+                    let result = (b & (a | c | d)) | (a & c & d);
+        
+                    set_oam_u16(start, result);
+
+                    for i in (0..8).step_by(2) {
+                        set_oam_u16(start - 8 + i, self.get_u16(start + i));
+                        set_oam_u16(start + 8 + i, self.get_u16(start + i));
+                    }
+                }
+
+                // Regardless of whether the previous corruption occurred or not, 
+                // a normal read corruption is then applied.
+                corruption = OamCorruption::Read;
+            }
+
+            if 0 < current_oam_row && current_oam_row < 20 {
+                let start = 0xFE00 + current_oam_row as u16 * 8;
+
+                let a = self.get_u16(start);     // Original value of that word
+                let b = self.get_u16(start - 8); // First word in the preceding row
+                let c = self.get_u16(start - 4); // Third word in the preceding row
+
+                let result = if corruption == OamCorruption::Read {
+                    b | (a & c)
+                } else {
+                    ((a ^ c) & (b ^ c)) ^ c
+                };
+
+                set_oam_u16(start, result);
+                set_oam_u16(start + 2, self.get_u16(start - 6));
+                set_oam_u16(start + 4, self.get_u16(start - 4));
+                set_oam_u16(start + 6, self.get_u16(start - 2));
+            }
+        }
     }
 }

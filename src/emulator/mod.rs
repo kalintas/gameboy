@@ -138,7 +138,7 @@ impl Emulator {
                 10:  65536 Hz   (~67110 Hz SGB)
                 11:  16384 Hz   (~16780 Hz SGB)
         */
-        let tac = self.memory_map.get_io(Io::TAC);
+        let tac = self.memory_map.cpu_get_io(Io::TAC);
 
         let timer_clock = match tac & 0x3 {
             0 => 4096,
@@ -155,10 +155,10 @@ impl Emulator {
             }
 
             // Calculate the new timer value.
-            let tima = self.memory_map.get_io(Io::TIMA);
+            let tima = self.memory_map.cpu_get_io(Io::TIMA);
 
             if tima < 0xFF {
-                self.memory_map.set_io(Io::TIMA, tima + 1);
+                self.memory_map.cpu_set_io(Io::TIMA, tima + 1);
             } else {
                 /*
                     Note:
@@ -168,9 +168,9 @@ impl Emulator {
 
                 // TIMA overflow occured. Set the TIMA register to TMA and request a Timer interrupt.
                 self.memory_map
-                    .set_io(Io::TIMA, self.memory_map.get_io(Io::TMA));
+                    .cpu_set_io(Io::TIMA, self.memory_map.cpu_get_io(Io::TMA));
                 self.memory_map
-                    .set_io(Io::IF, self.memory_map.get_io(Io::IF) | 0x4);
+                    .cpu_set_io(Io::IF, self.memory_map.cpu_get_io(Io::IF) | 0x4);
             }
         }
     }
@@ -236,9 +236,19 @@ impl Emulator {
 
                 self.cpu.cycle(&mut self.memory_map);
 
+                // if self.cpu.pc != 0xc571 && Cpu::decode(self.cpu.pc, &self.memory_map).name == "INC DE" {
+                //     self.memory_map.triggered_watch = Some(0);
+                // }
+
+                // if Cpu::decode(self.cpu.pc - 3, &self.memory_map).name == "LD SP,d16" 
+                //     && Cpu::decode(self.cpu.pc, &self.memory_map).name == "POP BC" {
+                //     self.memory_map.triggered_watch = Some(0);
+                // }
+
                 // Memory is triggered in user given condition. Stop execution.
                 if self.memory_map.triggered_watch.is_some() {
-                    return;
+                    self.base_clock += 4;
+                    break;
                 }
 
                 // Check if the DMA transfer is started.
@@ -257,7 +267,8 @@ impl Emulator {
 
                 if let Some(func) = &on_change {
                     if func(self.cpu.pc) {
-                        return;
+                        self.base_clock += 4;
+                        break;
                     }
                 }
             }
@@ -316,11 +327,11 @@ impl Emulator {
 
     #[allow(dead_code)]
     pub fn update_joypad(&mut self) {
-        let joyp = self.memory_map.get_io(Io::JOYP);
+        let joyp = self.memory_map.cpu_get_io(Io::JOYP);
 
         let keys = if joyp & 0x30 == 0x30 {
             // Reset joypad.
-            self.memory_map.set_io(Io::JOYP, 0xFF);
+            self.memory_map.cpu_set_io(Io::JOYP, 0xFF);
             return;
         } else if joyp & 0x10 != 0 {
             // Button keys
@@ -332,12 +343,12 @@ impl Emulator {
             return;
         };
 
-        self.memory_map.set_io(Io::JOYP, (joyp & 0xF0) | keys);
+        self.memory_map.cpu_set_io(Io::JOYP, (joyp & 0xF0) | keys);
 
         // Handle interrupt
         if keys != 0xF {
             self.memory_map
-                .set_io(Io::IF, self.memory_map.get_io(Io::IF) | 0x10);
+                .cpu_set_io(Io::IF, self.memory_map.cpu_get_io(Io::IF) | 0x10);
         }
     }
 }

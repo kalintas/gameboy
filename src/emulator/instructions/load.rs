@@ -1,5 +1,5 @@
 #![allow(dead_code, unused_variables)]
-use crate::emulator::memory_map::MemoryMap;
+use crate::emulator::memory_map::{MemoryMap, OamCorruption};
 use crate::emulator::Cpu;
 
 /// LD BC,d16 - 0x01 <br>
@@ -16,7 +16,7 @@ pub fn ld_bc_d16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_bc_addr_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(cpu.registers.bc(), cpu.registers.a);
+    memory_map.cpu_set(cpu.registers.bc(), cpu.registers.a);
     8
 }
 
@@ -34,7 +34,7 @@ pub fn ld_b_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 20 <br>
 ///  Flags affected: - - - -
 pub fn ld_a16_addr_sp(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set_u16(cpu.get_immediate_u16(memory_map), cpu.sp);
+    memory_map.cpu_set_u16(cpu.get_immediate_u16(memory_map), cpu.sp);
     20
 }
 
@@ -43,7 +43,7 @@ pub fn ld_a16_addr_sp(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_a_bc_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.a = memory_map.get(cpu.registers.bc());
+    cpu.registers.a = memory_map.cpu_get(cpu.registers.bc());
     8
 }
 
@@ -70,7 +70,7 @@ pub fn ld_de_d16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_de_addr_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(cpu.registers.de(), cpu.registers.a);
+    memory_map.cpu_set(cpu.registers.de(), cpu.registers.a);
     8
 }
 
@@ -88,7 +88,7 @@ pub fn ld_d_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_a_de_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.a = memory_map.get(cpu.registers.de());
+    cpu.registers.a = memory_map.cpu_get(cpu.registers.de());
     8
 }
 
@@ -115,8 +115,12 @@ pub fn ld_hl_d16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_hl_plus_addr_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(cpu.registers.hl(), cpu.registers.a);
+    
+    memory_map.disable_oam_corruption();
+    memory_map.try_corrupt_oam(cpu.registers.hl(), OamCorruption::IncDecRead);
+    memory_map.cpu_set(cpu.registers.hl(), cpu.registers.a);
     cpu.registers.set_hl(cpu.registers.hl().wrapping_add(1));
+    memory_map.enable_oam_corruption();
     8
 }
 
@@ -134,8 +138,13 @@ pub fn ld_h_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_a_hl_plus_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.a = memory_map.get(cpu.registers.hl());
+
+    memory_map.disable_oam_corruption();
+    memory_map.try_corrupt_oam(cpu.registers.hl(), OamCorruption::IncDecRead);
+    cpu.registers.a = memory_map.cpu_get(cpu.registers.hl());
     cpu.registers.set_hl(cpu.registers.hl().wrapping_add(1));
+    memory_map.enable_oam_corruption();
+
     8
 }
 
@@ -162,8 +171,11 @@ pub fn ld_sp_d16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_hl_minus_addr_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(cpu.registers.hl(), cpu.registers.a);
+    memory_map.disable_oam_corruption();
+    memory_map.try_corrupt_oam(cpu.registers.hl(), OamCorruption::IncDecRead);
+    memory_map.cpu_set(cpu.registers.hl(), cpu.registers.a);
     cpu.registers.set_hl(cpu.registers.hl().wrapping_sub(1));
+    memory_map.enable_oam_corruption();
     8
 }
 
@@ -172,7 +184,7 @@ pub fn ld_hl_minus_addr_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 12 <br>
 ///  Flags affected: - - - -
 pub fn ld_hl_addr_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(cpu.registers.hl(), cpu.get_immediate_u8(memory_map));
+    memory_map.cpu_set(cpu.registers.hl(), cpu.get_immediate_u8(memory_map));
     12
 }
 
@@ -181,8 +193,12 @@ pub fn ld_hl_addr_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_a_hl_minus_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.a = memory_map.get(cpu.registers.hl());
+    
+    memory_map.disable_oam_corruption();
+    memory_map.try_corrupt_oam(cpu.registers.hl(), OamCorruption::IncDecRead);
+    cpu.registers.a = memory_map.cpu_get(cpu.registers.hl());
     cpu.registers.set_hl(cpu.registers.hl().wrapping_sub(1));
+    memory_map.enable_oam_corruption();
     8
 }
 
@@ -254,7 +270,7 @@ pub fn ld_b_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_b_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.b = memory_map.get(cpu.registers.hl());
+    cpu.registers.b = memory_map.cpu_get(cpu.registers.hl());
     8
 }
 
@@ -326,7 +342,7 @@ pub fn ld_c_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_c_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.c = memory_map.get(cpu.registers.hl());
+    cpu.registers.c = memory_map.cpu_get(cpu.registers.hl());
     8
 }
 
@@ -398,7 +414,7 @@ pub fn ld_d_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_d_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.d = memory_map.get(cpu.registers.hl());
+    cpu.registers.d = memory_map.cpu_get(cpu.registers.hl());
     8
 }
 
@@ -470,7 +486,7 @@ pub fn ld_e_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_e_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.e = memory_map.get(cpu.registers.hl());
+    cpu.registers.e = memory_map.cpu_get(cpu.registers.hl());
     8
 }
 
@@ -542,7 +558,7 @@ pub fn ld_h_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_h_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.h = memory_map.get(cpu.registers.hl());
+    cpu.registers.h = memory_map.cpu_get(cpu.registers.hl());
     8
 }
 
@@ -614,7 +630,7 @@ pub fn ld_l_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_l_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.l = memory_map.get(cpu.registers.hl());
+    cpu.registers.l = memory_map.cpu_get(cpu.registers.hl());
     8
 }
 
@@ -632,7 +648,7 @@ pub fn ld_l_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_hl_addr_b(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(cpu.registers.hl(), cpu.registers.b);
+    memory_map.cpu_set(cpu.registers.hl(), cpu.registers.b);
     8
 }
 
@@ -641,7 +657,7 @@ pub fn ld_hl_addr_b(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_hl_addr_c(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(cpu.registers.hl(), cpu.registers.c);
+    memory_map.cpu_set(cpu.registers.hl(), cpu.registers.c);
     8
 }
 
@@ -650,7 +666,7 @@ pub fn ld_hl_addr_c(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_hl_addr_d(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(cpu.registers.hl(), cpu.registers.d);
+    memory_map.cpu_set(cpu.registers.hl(), cpu.registers.d);
     8
 }
 
@@ -659,7 +675,7 @@ pub fn ld_hl_addr_d(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_hl_addr_e(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(cpu.registers.hl(), cpu.registers.e);
+    memory_map.cpu_set(cpu.registers.hl(), cpu.registers.e);
     8
 }
 
@@ -668,7 +684,7 @@ pub fn ld_hl_addr_e(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_hl_addr_h(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(cpu.registers.hl(), cpu.registers.h);
+    memory_map.cpu_set(cpu.registers.hl(), cpu.registers.h);
     8
 }
 
@@ -677,7 +693,7 @@ pub fn ld_hl_addr_h(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_hl_addr_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(cpu.registers.hl(), cpu.registers.l);
+    memory_map.cpu_set(cpu.registers.hl(), cpu.registers.l);
     8
 }
 
@@ -686,7 +702,7 @@ pub fn ld_hl_addr_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_hl_addr_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(cpu.registers.hl(), cpu.registers.a);
+    memory_map.cpu_set(cpu.registers.hl(), cpu.registers.a);
     8
 }
 
@@ -749,7 +765,7 @@ pub fn ld_a_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_a_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.a = memory_map.get(cpu.registers.hl());
+    cpu.registers.a = memory_map.cpu_get(cpu.registers.hl());
     8
 }
 
@@ -767,8 +783,8 @@ pub fn ld_a_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 12 <br>
 ///  Flags affected: - - - -
 pub fn pop_bc(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.set_bc(memory_map.get_u16(cpu.sp));
-    cpu.sp += 2;
+    let result = cpu.pop(memory_map);
+    cpu.registers.set_bc(result);
     12
 }
 
@@ -777,8 +793,7 @@ pub fn pop_bc(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn push_bc(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.sp -= 2;
-    memory_map.set_u16(cpu.sp, cpu.registers.bc());
+    cpu.push(memory_map, cpu.registers.bc());
     16
 }
 
@@ -787,8 +802,8 @@ pub fn push_bc(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 12 <br>
 ///  Flags affected: - - - -
 pub fn pop_de(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.set_de(memory_map.get_u16(cpu.sp));
-    cpu.sp += 2;
+    let result = cpu.pop(memory_map);
+    cpu.registers.set_de(result);
     12
 }
 
@@ -797,8 +812,7 @@ pub fn pop_de(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn push_de(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.sp -= 2;
-    memory_map.set_u16(cpu.sp, cpu.registers.de());
+    cpu.push(memory_map, cpu.registers.de());
     16
 }
 
@@ -807,7 +821,7 @@ pub fn push_de(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 12 <br>
 ///  Flags affected: - - - -
 pub fn ldh_a8_addr_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.cpu_set(
         0xFF00 + cpu.get_immediate_u8(memory_map) as u16,
         cpu.registers.a,
     );
@@ -819,8 +833,8 @@ pub fn ldh_a8_addr_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 12 <br>
 ///  Flags affected: - - - -
 pub fn pop_hl(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.set_hl(memory_map.get_u16(cpu.sp));
-    cpu.sp += 2;
+    let result = cpu.pop(memory_map);
+    cpu.registers.set_hl(result);
     12
 }
 
@@ -829,7 +843,7 @@ pub fn pop_hl(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_c_addr_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(0xFF00 + cpu.registers.c as u16, cpu.registers.a);
+    memory_map.cpu_set(0xFF00 + cpu.registers.c as u16, cpu.registers.a);
     8
 }
 
@@ -838,8 +852,7 @@ pub fn ld_c_addr_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn push_hl(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.sp -= 2;
-    memory_map.set_u16(cpu.sp, cpu.registers.hl());
+    cpu.push(memory_map, cpu.registers.hl());
     16
 }
 
@@ -848,7 +861,7 @@ pub fn push_hl(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn ld_a16_addr_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(cpu.get_immediate_u16(memory_map), cpu.registers.a);
+    memory_map.cpu_set(cpu.get_immediate_u16(memory_map), cpu.registers.a);
     16
 }
 
@@ -857,7 +870,7 @@ pub fn ld_a16_addr_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 12 <br>
 ///  Flags affected: - - - -
 pub fn ldh_a_a8_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.a = memory_map.get(0xFF00 + cpu.get_immediate_u8(memory_map) as u16);
+    cpu.registers.a = memory_map.cpu_get(0xFF00 + cpu.get_immediate_u8(memory_map) as u16);
     12
 }
 
@@ -866,8 +879,8 @@ pub fn ldh_a_a8_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 12 <br>
 ///  Flags affected: Z N H C
 pub fn pop_af(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.set_af(memory_map.get_u16(cpu.sp));
-    cpu.sp += 2;
+    let result = cpu.pop(memory_map);
+    cpu.registers.set_af(result);
     12
 }
 
@@ -876,7 +889,7 @@ pub fn pop_af(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_a_c_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.a = memory_map.get(0xFF00 + cpu.registers.c as u16);
+    cpu.registers.a = memory_map.cpu_get(0xFF00 + cpu.registers.c as u16);
     8
 }
 
@@ -885,8 +898,7 @@ pub fn ld_a_c_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn push_af(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.sp -= 2;
-    memory_map.set_u16(cpu.sp, cpu.registers.af());
+    cpu.push(memory_map, cpu.registers.af());
     16
 }
 
@@ -924,6 +936,6 @@ pub fn ld_sp_hl(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 16 <br>
 ///  Flags affected: - - - -
 pub fn ld_a_a16_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.registers.a = memory_map.get(cpu.get_immediate_u16(memory_map));
+    cpu.registers.a = memory_map.cpu_get(cpu.get_immediate_u16(memory_map));
     16
 }

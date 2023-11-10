@@ -1,5 +1,5 @@
 #![allow(dead_code, unused_variables)]
-use crate::emulator::memory_map::MemoryMap;
+use crate::emulator::memory_map::{MemoryMap, OamCorruption};
 use crate::emulator::Cpu;
 
 /// INC BC - 0x03 <br>
@@ -7,6 +7,7 @@ use crate::emulator::Cpu;
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn inc_bc(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
+    memory_map.try_corrupt_oam(cpu.registers.bc(), OamCorruption::Write);
     cpu.registers.set_bc(cpu.registers.bc().wrapping_add(1));
     8
 }
@@ -43,6 +44,8 @@ pub fn add_hl_bc(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn dec_bc(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
+    
+    memory_map.try_corrupt_oam(cpu.registers.bc(), OamCorruption::Write);
     cpu.registers.set_bc(cpu.registers.bc().wrapping_sub(1));
     8
 }
@@ -70,6 +73,7 @@ pub fn dec_c(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn inc_de(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
+    memory_map.try_corrupt_oam(cpu.registers.de(), OamCorruption::Write);
     cpu.registers.set_de(cpu.registers.de().wrapping_add(1));
     8
 }
@@ -106,6 +110,7 @@ pub fn add_hl_de(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn dec_de(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
+    memory_map.try_corrupt_oam(cpu.registers.de(), OamCorruption::Write);
     cpu.registers.set_de(cpu.registers.de().wrapping_sub(1));
     8
 }
@@ -133,6 +138,7 @@ pub fn dec_e(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn inc_hl(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
+    memory_map.try_corrupt_oam(cpu.registers.hl(), OamCorruption::Write);
     cpu.registers.set_hl(cpu.registers.hl().wrapping_add(1));
     8
 }
@@ -160,7 +166,6 @@ pub fn dec_h(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 4 <br>
 ///  Flags affected: Z - 0 C
 pub fn daa(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    // TODO:
     /*
         DAA is intended to be run immediately after an addition or subtraction operation,
         where the operands were BCD encoded.
@@ -210,6 +215,7 @@ pub fn add_hl_hl(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn dec_hl(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
+    memory_map.try_corrupt_oam(cpu.registers.hl(), OamCorruption::Write);
     cpu.registers.set_hl(cpu.registers.hl().wrapping_sub(1));
     8
 }
@@ -249,6 +255,7 @@ pub fn cpl(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn inc_sp(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
+    memory_map.try_corrupt_oam(cpu.sp, OamCorruption::Write);
     cpu.sp = cpu.sp.wrapping_add(1);
     8
 }
@@ -258,9 +265,10 @@ pub fn inc_sp(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 12 <br>
 ///  Flags affected: Z 0 H -
 pub fn inc_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.try_corrupt_oam(cpu.registers.hl(), OamCorruption::Write);
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.inc(memory_map.get(cpu.registers.hl())),
+        cpu.inc(memory_map.cpu_get(cpu.registers.hl())),
     );
     12
 }
@@ -270,9 +278,10 @@ pub fn inc_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 12 <br>
 ///  Flags affected: Z 1 H -
 pub fn dec_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    memory_map.set(
+    memory_map.try_corrupt_oam(cpu.registers.hl(), OamCorruption::Write);
+    memory_map.cpu_set(
         cpu.registers.hl(),
-        cpu.dec(memory_map.get(cpu.registers.hl())),
+        cpu.dec(memory_map.cpu_get(cpu.registers.hl())),
     );
     12
 }
@@ -301,6 +310,7 @@ pub fn add_hl_sp(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn dec_sp(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
+    memory_map.try_corrupt_oam(cpu.sp, OamCorruption::Write);
     cpu.sp = cpu.sp.wrapping_sub(1);
     8
 }
@@ -397,7 +407,7 @@ pub fn add_a_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 0 H C
 pub fn add_a_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.add(memory_map.get(cpu.registers.hl()));
+    cpu.add(memory_map.cpu_get(cpu.registers.hl()));
     8
 }
 
@@ -469,7 +479,7 @@ pub fn adc_a_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 0 H C
 pub fn adc_a_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.adc(memory_map.get(cpu.registers.hl()));
+    cpu.adc(memory_map.cpu_get(cpu.registers.hl()));
     8
 }
 
@@ -541,7 +551,7 @@ pub fn sub_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 1 H C
 pub fn sub_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.sub(memory_map.get(cpu.registers.hl()));
+    cpu.sub(memory_map.cpu_get(cpu.registers.hl()));
     8
 }
 
@@ -613,7 +623,7 @@ pub fn sbc_a_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 1 H C
 pub fn sbc_a_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.sbc(memory_map.get(cpu.registers.hl()));
+    cpu.sbc(memory_map.cpu_get(cpu.registers.hl()));
     8
 }
 
@@ -685,7 +695,7 @@ pub fn and_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 0 1 0
 pub fn and_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.and(memory_map.get(cpu.registers.hl()));
+    cpu.and(memory_map.cpu_get(cpu.registers.hl()));
     8
 }
 
@@ -757,7 +767,7 @@ pub fn xor_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 0 0 0
 pub fn xor_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.xor(memory_map.get(cpu.registers.hl()));
+    cpu.xor(memory_map.cpu_get(cpu.registers.hl()));
     8
 }
 
@@ -829,7 +839,7 @@ pub fn or_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: Z 0 0 0
 pub fn or_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    cpu.or(memory_map.get(cpu.registers.hl()));
+    cpu.or(memory_map.cpu_get(cpu.registers.hl()));
     8
 }
 
@@ -914,7 +924,7 @@ pub fn cp_l(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Flags affected: Z 1 H C
 pub fn cp_hl_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
     let old_a = cpu.registers.a;
-    cpu.sub(memory_map.get(cpu.registers.hl()));
+    cpu.sub(memory_map.cpu_get(cpu.registers.hl()));
     cpu.registers.a = old_a;
     8
 }
