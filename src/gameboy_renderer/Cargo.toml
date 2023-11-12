@@ -1,0 +1,29 @@
+[package]
+name = "gameboy_renderer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+gameboy = { version = "0.1.0", path = "../gameboy" }
+gl = "0.14.0"
+imgui = { git = "https://github.com/imgui-rs/imgui-rs" }
+imgui-sdl2-support  = { git = "https://github.com/imgui-rs/imgui-rs" }
+imgui-glow-renderer  = { git = "https://github.com/imgui-rs/imgui-rs" }
+rfd = "0.12.0"
+strum = "0.25"
+
+[dependencies.sdl2]
+version = "0.34.5"
+features = [ "bundled", "static-link" ]
+
+[lib]
+name = "gameboy_renderer"
+path = "src/lib.rs"
+test = false
+
+[[bin]]
+name = "gameboy"
+path = "src/bin.rs"
+test = false
+
+

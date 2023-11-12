@@ -1,0 +1,20 @@
+[package]
+name = "gameboy"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+memoffset = "0.9.0"
+strum = "0.25"
+strum_macros = "0.25"
+dyn-clone = "1.0.14"
+arrayvec = "0.7.4"
+
+[dev-dependencies]
+image = "0.24.7"
+image-compare = "0.3.1"
+
+[lib]
+name = "gameboy"
+path = "src/lib.rs"
+test = false

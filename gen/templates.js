@@ -9,8 +9,8 @@ mod load;
 mod arithmetic;
 mod bit;
 
-use crate::emulator::Cpu;
-use crate::emulator::memory_map::MemoryMap;
+use gameboy::Cpu;
+use gameboy::memory_map::MemoryMap;
 
 #[derive(Clone, Copy)]
 pub struct Instruction {
@@ -48,8 +48,8 @@ ${prefixCBInstructions}
 
 function instructionFunctionFile(instructionFunctions) {
     return`#![allow(dead_code, unused_variables)]
-use crate::emulator::memory_map::MemoryMap;
-use crate::emulator::Cpu;
+use gameboy::memory_map::MemoryMap;
+use gameboy::Cpu;
 ${instructionFunctions}`
 }
 

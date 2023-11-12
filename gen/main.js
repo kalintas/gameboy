@@ -94,7 +94,7 @@ function processTable(tableId) {
 const instructions = processTable('opcodeTable');
 const prefixCBInstructions = processTable('prefixCBTable');
 
-const instructionsDirPath = path.join(__dirname, "../src/emulator/instructions/");
+const instructionsDirPath = path.join(__dirname, "../src/gameboy/src/instructions/");
 
 fs.writeFileSync(path.join(instructionsDirPath, "./mod.rs"), instructionFile(instructions, prefixCBInstructions));
 

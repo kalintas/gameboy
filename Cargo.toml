@@ -1,20 +1,7 @@
-[package]
-name = "gameboy"
-version = "0.1.0"
-edition = "2021"
+[workspace]
 
-[dependencies]
-gl = "0.14.0"
-imgui = { git = "https://github.com/imgui-rs/imgui-rs" }
-imgui-sdl2-support  = { git = "https://github.com/imgui-rs/imgui-rs" }
-imgui-glow-renderer  = { git = "https://github.com/imgui-rs/imgui-rs" }
-strum = "0.25"
-strum_macros = "0.25"
-rfd = "0.12.0"
-arrayvec = "0.7.4"
-dyn-clone = "1.0.14"
-memoffset = "0.9.0"
-
-[dependencies.sdl2]
-version = "0.34.5"
-features = [ "bundled", "static-link" ]
+resolver = "2"
+members = [
+    "src/gameboy",
+    "src/gameboy_renderer"
+]
