@@ -1,43 +1,63 @@
-use std::collections::HashMap;
+use std::{
+    error::Error,
+    fs::File,
+    io::{BufWriter, Write},
+    path::Path,
+};
 
 use gameboy::Gameboy;
 
 use super::{GoToLinePopup, Panel};
 
 pub struct MemoryPanel {
-    string: Box<[u8; 0x1000 * 57]>,
-
     go_to_line_popup: GoToLinePopup,
 }
 
 impl MemoryPanel {
     pub fn new() -> Self {
-        let mut string = Box::new([' ' as u8; 0x1000 * 57]);
-
-        for i in 0u32..0x1000u32 {
-            let t = i as usize * 57;
-
-            string[t] = char::from_digit(((i * 0x10) & 0xF000) >> 12, 16).unwrap() as u8;
-            string[t + 1] = char::from_digit(((i * 0x10) & 0x0F00) >> 8, 16).unwrap() as u8;
-            string[t + 2] = char::from_digit(((i * 0x10) & 0x00F0) >> 4, 16).unwrap() as u8;
-            string[t + 3] = char::from_digit((i * 0x10) & 0x000F, 16).unwrap() as u8;
-            string[t + 4] = ':' as u8;
-
-            for j in 0..32 {
-                string[t + j + 6] = '0' as u8;
-            }
-
-            for j in 0..16 {
-                string[t + j + 39] = '.' as u8;
-            }
-
-            string[t + 56] = '\n' as u8;
-        }
-
         Self {
-            string,
             go_to_line_popup: GoToLinePopup::new("Go To Line###memory"),
         }
+    }
+
+    pub fn dump_to_file(
+        &self,
+        path: impl AsRef<Path>,
+        emulator: &Gameboy,
+    ) -> Result<(), Box<dyn Error>> {
+        let file = File::create(path)?;
+        let mut file = BufWriter::new(file);
+
+        for i in 0..0x10000usize {
+            let mut line = [' ' as u8; 58];
+            Self::format_line(emulator, &mut line, i as _);
+            line[line.len() - 1] = '\n' as u8;
+            file.write(&line)?;
+        }
+
+        Ok(())
+    }
+
+    fn format_line<'a>(emulator: &Gameboy, line: &'a mut [u8], current_row: u16) -> &'a str {
+        let index = current_row * 0x10;
+
+        super::format_in_place(line, index, 0);
+
+        line[4] = ':' as u8;
+        for i in 0..16 {
+            let memory_value = emulator.memory_map.get(index + i as u16);
+            super::format_in_place(line, memory_value, i * 2 + 6);
+
+            let mut character = memory_value as char;
+
+            if !character.is_ascii_graphic() {
+                character = '.';
+            }
+
+            line[39 + i] = character as u8;
+        }
+
+        unsafe { std::str::from_utf8_unchecked(line) }
     }
 
     // A round function for hexadecimal integer rounding.
@@ -54,28 +74,9 @@ impl MemoryPanel {
 }
 
 impl Panel for MemoryPanel {
-    fn update(&mut self, _: &Gameboy, changes: &HashMap<u16, u8>) {
-        for (address, value) in changes.iter() {
-            let address = *address as usize;
+    fn update(&mut self, _: &Gameboy) {}
 
-            let index = (address / 0x10) * 57 + (address % 0x10) * 2 + 6;
-
-            self.string[index] = char::from_digit(((value & 0xF0) >> 4) as _, 16).unwrap() as u8;
-            self.string[index + 1] = char::from_digit((value & 0x0F) as _, 16).unwrap() as u8;
-
-            let text_index = (address / 0x10) * 57 + (address % 0x10) + 39;
-
-            let mut character = *value as char;
-
-            if !character.is_ascii_graphic() {
-                character = '.';
-            }
-
-            self.string[text_index] = character as u8;
-        }
-    }
-
-    fn render(&mut self, ui: &imgui::Ui, _: &mut Gameboy, width: f32, height: f32) {
+    fn render(&mut self, ui: &imgui::Ui, emulator: &mut Gameboy, width: f32, height: f32) {
         ui.window("Memory")
             .resizable(false)
             .collapsible(false)
@@ -92,9 +93,16 @@ impl Panel for MemoryPanel {
                     |line| Self::round(line) as f32 / 0xFFF0 as f32,
                 );
 
-                let string = std::str::from_utf8(&*self.string).unwrap();
+                // Use a list clipper for efficient rendering.
+                // This will only render visible lines of the text.
+                let clipper = imgui::ListClipper::new(0x1000)
+                    .items_height(ui.current_font_size())
+                    .begin(ui);
 
-                ui.text(string);
+                clipper.iter().for_each(|current_row| {
+                    let mut line = [' ' as u8; 57];
+                    ui.text(Self::format_line(emulator, &mut line, current_row as _));
+                });
             });
     }
 }

@@ -115,7 +115,6 @@ pub fn ld_hl_d16(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_hl_plus_addr_a(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    
     memory_map.disable_oam_corruption();
     memory_map.try_corrupt_oam(cpu.registers.hl(), OamCorruption::IncDecRead);
     memory_map.cpu_set(cpu.registers.hl(), cpu.registers.a);
@@ -138,7 +137,6 @@ pub fn ld_h_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_a_hl_plus_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-
     memory_map.disable_oam_corruption();
     memory_map.try_corrupt_oam(cpu.registers.hl(), OamCorruption::IncDecRead);
     cpu.registers.a = memory_map.cpu_get(cpu.registers.hl());
@@ -193,7 +191,6 @@ pub fn ld_hl_addr_d8(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn ld_a_hl_minus_addr(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    
     memory_map.disable_oam_corruption();
     memory_map.try_corrupt_oam(cpu.registers.hl(), OamCorruption::IncDecRead);
     cpu.registers.a = memory_map.cpu_get(cpu.registers.hl());

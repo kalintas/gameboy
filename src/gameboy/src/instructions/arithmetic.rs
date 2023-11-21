@@ -44,7 +44,6 @@ pub fn add_hl_bc(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
 ///  Duration in cycles: 8 <br>
 ///  Flags affected: - - - -
 pub fn dec_bc(cpu: &mut Cpu, memory_map: &mut MemoryMap) -> u8 {
-    
     memory_map.try_corrupt_oam(cpu.registers.bc(), OamCorruption::Write);
     cpu.registers.set_bc(cpu.registers.bc().wrapping_sub(1));
     8

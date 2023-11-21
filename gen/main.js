@@ -11,6 +11,8 @@ const { document } = (new JSDOM(opcodeFile)).window;
 
 const instructionFunctions = { misc: "", jump: "", load: "", arithmetic: "", bit: "" };
 
+let maxInstructionNameLength = 0;
+
 function processTable(tableId) {
 
     const opcodeTable = document.getElementById(tableId);
@@ -79,6 +81,8 @@ function processTable(tableId) {
                     instructionType = "bit";
                 }
 
+                maxInstructionNameLength = Math.max(maxInstructionNameLength, instructionName.length);
+
                 instructionFunctions[instructionType] += instructionFunction(opcode, instructionName, lengthInBytes, durationInCycles, flagsAffected, functionName);
 
                 instructions += `    Instruction::new("${instructionName}", ${lengthInBytes}, ${instructionType}::${functionName}),\n`;
@@ -96,7 +100,7 @@ const prefixCBInstructions = processTable('prefixCBTable');
 
 const instructionsDirPath = path.join(__dirname, "../src/gameboy/src/instructions/");
 
-fs.writeFileSync(path.join(instructionsDirPath, "./mod.rs"), instructionFile(instructions, prefixCBInstructions));
+fs.writeFileSync(path.join(instructionsDirPath, "./mod.rs"), instructionFile(instructions, prefixCBInstructions, maxInstructionNameLength));
 
 
 // Regex to find and capture function contents.

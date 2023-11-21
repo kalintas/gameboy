@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use gameboy::JoypadKeys;
 use imgui::Key;
 use sdl2::keyboard::Scancode;
@@ -58,7 +56,7 @@ impl KeyboardMapPanel {
 }
 
 impl Panel for KeyboardMapPanel {
-    fn update(&mut self, _: &gameboy::Gameboy, _: &HashMap<u16, u8>) {}
+    fn update(&mut self, _: &gameboy::Gameboy) {}
 
     fn render(&mut self, ui: &imgui::Ui, _: &mut gameboy::Gameboy, _: f32, _: f32) {
         if !self.opened {

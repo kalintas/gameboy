@@ -1,7 +1,5 @@
-use std::collections::HashMap;
-
 use gameboy::{
-    memory_map::{self, Io},
+    memory_map::{self},
     Gameboy,
 };
 
@@ -16,7 +14,7 @@ impl RegistersPanel {
 }
 
 impl Panel for RegistersPanel {
-    fn update(&mut self, _: &Gameboy, _: &HashMap<u16, u8>) {}
+    fn update(&mut self, _: &Gameboy) {}
 
     fn render(&mut self, ui: &imgui::Ui, emulator: &mut Gameboy, width: f32, height: f32) {
         ui.window("Registers")
@@ -158,15 +156,6 @@ impl Panel for RegistersPanel {
                 }
                 if old_if != new_if {
                     emulator.memory_map.set_io(memory_map::Io::IF, new_if);
-                }
-
-                ui.separator();
-                // LCD Control Registers
-
-                let mut joyp = emulator.memory_map.get_io(Io::JOYP);
-
-                if super::hex_input_u8(ui, "JOYP", &mut joyp) {
-                    emulator.memory_map.set_io(Io::JOYP, joyp);
                 }
             });
     }

@@ -1,6 +1,9 @@
 use imgui::TextureId;
 
-use gameboy::{memory_map::Io, ppu::{self}};
+use gameboy::{
+    memory_map::Io,
+    ppu::{self},
+};
 
 use crate::renderer::framebuffer::Framebuffer;
 
@@ -38,11 +41,7 @@ impl BgMapPanel {
 }
 
 impl Panel for BgMapPanel {
-    fn update(
-        &mut self,
-        emulator: &gameboy::Gameboy,
-        changes: &std::collections::HashMap<u16, u8>,
-    ) {
+    fn update(&mut self, emulator: &gameboy::Gameboy) {
         if !self.opened {
             self.first_run = true;
             return;
@@ -57,20 +56,21 @@ impl Panel for BgMapPanel {
             0x8000
         };
 
-        let pallete = ppu::Ppu::get_color_pallete(&emulator.ppu.color_shades, emulator.memory_map.get_io(Io::BGP));
+        let pallete = ppu::Ppu::get_color_pallete(
+            &emulator.ppu.color_shades,
+            emulator.memory_map.get_io(Io::BGP),
+        );
 
         let scx = emulator.memory_map.get_io(Io::SCX);
         let scy = emulator.memory_map.get_io(Io::SCY);
 
         if !self.first_run
             && (self.old_scx == scx && self.old_scy == scy)
-            && !changes.iter().any(|(&address, _)| {
-                (bg_tile_map_start <= address && address < bg_tile_map_start + 0x400)
-                    || (bg_tile_data_start <= address && address < bg_tile_map_start + 0x1000)
-            })
+            && !emulator.memory_map.vram_changed
         {
             return;
         }
+
         self.first_run = false;
 
         for y in 0..PANEL_HEIGHT {

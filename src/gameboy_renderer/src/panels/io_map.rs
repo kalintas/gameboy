@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use strum::IntoEnumIterator;
 
 use gameboy::memory_map::Io;
@@ -17,7 +15,7 @@ impl IoMapPanel {
 }
 
 impl Panel for IoMapPanel {
-    fn update(&mut self, _: &gameboy::Gameboy, _: &HashMap<u16, u8>) {}
+    fn update(&mut self, _: &gameboy::Gameboy) {}
 
     fn render(&mut self, ui: &imgui::Ui, emulator: &mut gameboy::Gameboy, _: f32, _: f32) {
         if !self.opened {

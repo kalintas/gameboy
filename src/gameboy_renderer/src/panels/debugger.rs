@@ -1,22 +1,22 @@
 use std::{
-    collections::HashMap,
+    error::Error,
     fs::File,
     io::{BufWriter, Write},
+    path::Path,
+    ptr::copy_nonoverlapping,
     time::Instant,
 };
 
 use imgui::StyleColor;
 use strum::IntoEnumIterator;
 
-use gameboy::{cpu::Cpu, memory_map::Io, Gameboy};
+use gameboy::{
+    instructions::{Instruction, MAX_INSTRUCTION_NAME_LENGTH},
+    memory_map::Io,
+    Gameboy,
+};
 
 use super::{GoToLinePopup, Panel};
-
-// BIG TODO:
-// Disassembly could end up wrong in some cases.
-// Do we need to store all Strings?
-// Find a way to create the display on the fly. -> This will solve all updating costs and will make it real-time updatable
-// Currently it works but this update is required immediately.
 
 struct DebuggerWindow {
     opened: bool,
@@ -90,7 +90,9 @@ pub struct Breakpoint {
 }
 
 pub struct DebuggerPanel {
-    strings: Vec<String>,
+    current_start_row: i32,
+    current_start_address: u16,
+    line_count: i32,
 
     breakpoints: Vec<Breakpoint>,
 
@@ -100,7 +102,6 @@ pub struct DebuggerPanel {
 
     runinng_next_line: bool,
     clock_timer: Instant,
-    update_required: bool,
 
     go_to_line_popup: GoToLinePopup,
 
@@ -110,14 +111,11 @@ pub struct DebuggerPanel {
 
 impl DebuggerPanel {
     pub fn new() -> Self {
-        let mut strings = Vec::with_capacity(10000);
-
-        for i in 0..0x10000 {
-            strings.push(format!("{:04x}: 00             NOP", i));
-        }
-
         Self {
-            strings,
+            current_start_row: 0,
+            current_start_address: 0,
+            line_count: 0,
+
             breakpoints: Vec::new(),
 
             continued_breakpoint: None,
@@ -126,7 +124,6 @@ impl DebuggerPanel {
 
             runinng_next_line: false,
             clock_timer: Instant::now(),
-            update_required: true,
 
             go_to_line_popup: GoToLinePopup::new("Go To Line###debugger"),
 
@@ -152,7 +149,9 @@ impl DebuggerPanel {
             let elapsed_time = now - self.clock_timer;
 
             emulator.debug_cycle(elapsed_time, |emulator| {
-                self.breakpoints.iter().any(|point| point.pointer == emulator.cpu.pc)
+                self.breakpoints
+                    .iter()
+                    .any(|point| point.pointer == emulator.cpu.pc)
             });
 
             if emulator.memory_map.triggered_watch.is_some() {
@@ -196,14 +195,11 @@ impl DebuggerPanel {
 
     pub fn pause(&mut self, emulator: &Gameboy) {
         self.toggled_breakpoint = Some(Breakpoint {
-            row: self.get_pc_row(emulator),
+            row: self.get_line_at_address(emulator, emulator.cpu.pc as _),
             pointer: emulator.cpu.pc,
         });
 
-        if self.update_required {
-            self.update_strings(emulator);
-            self.update_required = false;
-        }
+        self.line_count = self.get_line_at_address(emulator, 0x10000);
     }
 
     pub fn clear_breakpoints(&mut self) {
@@ -211,110 +207,133 @@ impl DebuggerPanel {
         self.breakpoints_window.strings.clear();
     }
 
-    pub fn dump_strings(&self) {
-        let file = File::create("c:/Users/kerem/Desktop/disassembly_dump.txt").unwrap();
+    pub fn dump_to_file(
+        &self,
+        path: impl AsRef<Path>,
+        emulator: &Gameboy,
+    ) -> Result<(), Box<dyn Error>> {
+        let file = File::create(path)?;
         let mut file = BufWriter::new(file);
 
-        self.strings
-            .iter()
-            .for_each(|string| write!(file, "{}\n", string).unwrap());
-    }
+        let mut pointer: usize = 0;
 
-    fn get_pc_row(&self, emulator: &Gameboy) -> i32 {
-        let mut row = 0;
+        while pointer < 0x10000 {
+            let instruction = emulator.decode_instr(pointer as _);
 
-        let mut pointer: u16 = 0;
+            let mut buffer = [' ' as u8; 30 + MAX_INSTRUCTION_NAME_LENGTH];
+            Self::format_instruction_name(&mut buffer, emulator, instruction, pointer as _);
+            buffer[buffer.len() - 1] = '\n' as u8;
+            file.write(&buffer)?;
 
-        while pointer < emulator.cpu.pc {
-            pointer += Cpu::decode(pointer, &emulator.memory_map).length as u16;
-            row += 1;
+            pointer += instruction.length as usize;
         }
 
-        row
+        Ok(())
     }
 
-    fn update_strings(&mut self, emulator: &Gameboy) {
-        self.strings.clear();
+    fn get_line_at_address(&mut self, emulator: &Gameboy, address: usize) -> i32 {
+        let mut line = 0;
+        let mut pointer: usize = 0;
 
-        let mut index: usize = 0;
+        while pointer < address {
+            let instruction = emulator.decode_instr(pointer as _);
+            line += 1;
+            pointer += instruction.length as usize;
+        }
 
-        while index < 0x10000 {
-            let instruction = Cpu::decode(index as u16, &emulator.memory_map);
+        line
+    }
 
-            let mut line = format!("{:04x}:", index);
+    fn get_address_at_line(&mut self, emulator: &Gameboy, line: i32) -> usize {
+        let mut pointer = 0;
+        for _ in 0..line {
+            let instruction = emulator.decode_instr(pointer as u16);
+            pointer += instruction.length as usize;
+        }
 
-            for i in 0..3 {
-                if i < instruction.length as usize {
-                    line = format!(
-                        "{} {:02x}",
-                        line,
-                        emulator.memory_map.get((index + i) as u16)
-                    );
-                } else {
-                    line = format!("{}   ", line);
+        pointer
+    }
+
+    fn format_instruction_name<'a>(
+        buffer: &'a mut [u8],
+        emulator: &Gameboy,
+        instruction: Instruction,
+        address: u16,
+    ) -> &'a str {
+        assert!(buffer.len() >= 21 + MAX_INSTRUCTION_NAME_LENGTH);
+
+        super::format_in_place(buffer, address, 0);
+        buffer[4] = ':' as u8;
+
+        for i in 0..instruction.length as _ {
+            super::format_in_place(
+                buffer,
+                emulator.memory_map.get(address + i),
+                6 + i as usize * 3,
+            );
+        }
+
+        unsafe {
+            copy_nonoverlapping(
+                instruction.name.as_bytes().as_ptr(),
+                buffer.as_mut_ptr().add(21),
+                instruction.name.len(),
+            );
+        }
+
+        let mut replace_signature = |signature: &'static str, bytes: u16| {
+            if let Some(signature_location) = instruction.name.find(signature) {
+                // // Instrcutions with relavite data format
+                // if instruction_name.starts_with("ADD SP") ||
+                // instruction_name.starts_with("JR") ||
+                // instruction_name.starts_with("LD HL,SP") {
+                // }
+
+                let mut data: u16 = 0;
+
+                for i in 0..bytes {
+                    data = (data << 8)
+                        | emulator
+                            .memory_map
+                            .get(address + instruction.length as u16 - i - 1)
+                            as u16;
                 }
+
+                let index = 21 + signature_location;
+
+                let difference = (bytes as usize * 2 + 2) - signature.len();
+
+                for i in (signature_location + signature.len()..instruction.name.len()).rev() {
+                    buffer[21 + i + difference] = buffer[21 + i];
+                }
+
+                buffer[index] = '0' as u8;
+                buffer[index + 1] = 'x' as u8;
+
+                if bytes == 1 {
+                    super::format_in_place::<u8>(buffer, data as _, index + 2);
+                } else {
+                    super::format_in_place(buffer, data, index + 2);
+                }
+
+                true
+            } else {
+                false
             }
+        };
 
-            let mut instruction_name = instruction.name.to_string();
+        let _ = replace_signature("d16", 2)
+            || replace_signature("a16", 2)
+            || replace_signature("r8", 1)
+            || replace_signature("d8", 1)
+            || replace_signature("a8", 1);
 
-            let mut replace_signature = |signature: &'static str, bytes: usize| {
-                if instruction.name.contains(signature) {
-                    // // Instrcutions with relavite data format
-                    // if instruction_name.starts_with("ADD SP") ||
-                    // instruction_name.starts_with("JR") ||
-                    // instruction_name.starts_with("LD HL,SP") {
-
-                    // }
-
-                    let mut data: u16 = 0;
-
-                    for i in 0..bytes {
-                        data = (data << 8)
-                            | emulator
-                                .memory_map
-                                .get((index + (instruction.length as usize) - i - 1) as u16)
-                                as u16;
-                    }
-
-                    instruction_name = instruction
-                        .name
-                        .replace(signature, format!("0x{:02X}", data).as_str());
-
-                    true
-                } else {
-                    false
-                }
-            };
-
-            let _ = replace_signature("d16", 2)
-                || replace_signature("a16", 2)
-                || replace_signature("r8", 1)
-                || replace_signature("d8", 1)
-                || replace_signature("a8", 1);
-
-            self.strings
-                .push(format!("{}       {}", line, instruction_name));
-
-            index += instruction.length as usize;
-        }
+        unsafe { std::str::from_utf8_unchecked(buffer) }
     }
 }
 
 impl Panel for DebuggerPanel {
-    fn update(&mut self, emulator: &Gameboy, changes: &HashMap<u16, u8>) {
-        // TODO: make this work in realtime.
-
-        // Debugger panel only updated when the debugger is paused.
-        // This is done because updating the panel is very expensive.
-
-        if !changes.is_empty() {
-            if self.toggled_breakpoint.is_some() {
-                self.update_strings(emulator);
-            } else {
-                self.update_required = true;
-            }
-        }
-    }
+    fn update(&mut self, _: &Gameboy) {}
 
     fn render(&mut self, ui: &imgui::Ui, emulator: &mut Gameboy, width: f32, height: f32) {
         ui.window("Debugger")
@@ -372,7 +391,7 @@ impl Panel for DebuggerPanel {
                     // Go to PC button
                     ui.same_line();
                     if ui.button("PC") {
-                        row_scroll = Some(self.get_pc_row(emulator));
+                        row_scroll = Some(self.get_line_at_address(emulator, emulator.cpu.pc as _));
                     }
 
                     if ui.is_item_hovered() {
@@ -544,12 +563,11 @@ impl Panel for DebuggerPanel {
                 self.go_to_line_popup.render(
                     ui,
                     |scroll| {
-                        let line = (self.strings.len() as f32 * scroll) as u32;
+                        let line = (self.line_count as f32 * scroll) as u32;
                         let mut pointer = 0;
 
                         for _ in 0..line {
-                            pointer +=
-                                Cpu::decode(pointer as _, &emulator.memory_map).length as u32;
+                            pointer += emulator.decode_instr(pointer as _).length as u32;
                         }
 
                         pointer
@@ -560,26 +578,43 @@ impl Panel for DebuggerPanel {
 
                         while current_pointer < pointer {
                             current_pointer +=
-                                Cpu::decode(current_pointer as _, &emulator.memory_map).length
-                                    as u32;
+                                emulator.decode_instr(current_pointer as _).length as u32;
                             line += 1;
                         }
 
-                        line as f32 / self.strings.len() as f32
+                        line as f32 / self.line_count as f32
                     },
                 );
 
                 // Use a list clipper for efficient rendering.
                 // This will only render visible lines of the text.
-                let clipper = imgui::ListClipper::new(self.strings.len() as i32)
+                let clipper = imgui::ListClipper::new(self.line_count)
                     .items_height(ui.current_font_size())
                     .begin(ui);
 
+                let mut is_first_row = true;
+
+                let mut current_address = self.current_start_address;
+
                 clipper.iter().for_each(|current_row| {
+                    if is_first_row {
+                        // User scrolled the list. Update start address and row.
+                        if self.current_start_row != current_row {
+                            self.current_start_address =
+                                self.get_address_at_line(emulator, current_row) as u16;
+                            self.current_start_row = current_row;
+                        }
+
+                        is_first_row = false;
+                    } else if current_row == self.line_count {
+                        // Reaching this branch means the value in the self.line_count is stale and should be updated.
+                        self.line_count = self.get_line_at_address(emulator, 0x10000);
+                    }
+
                     let breakpoint = self
                         .breakpoints
                         .iter()
-                        .position(|point| point.row == current_row);
+                        .position(|point| point.pointer == current_address);
                     let mut text_color = None;
 
                     if breakpoint.is_some() {
@@ -587,11 +622,20 @@ impl Panel for DebuggerPanel {
                             Some(ui.push_style_color(StyleColor::Text, [1.0, 0.0, 0.0, 1.0]));
                     }
 
+                    let instruction = emulator.decode_instr(current_address);
+
+                    let mut buffer = [' ' as u8; 30 + MAX_INSTRUCTION_NAME_LENGTH];
+
                     if ui
-                        .selectable_config(&self.strings[current_row as usize])
+                        .selectable_config(Self::format_instruction_name(
+                            &mut buffer,
+                            emulator,
+                            instruction,
+                            current_address,
+                        ))
                         .selected(
                             self.toggled_breakpoint
-                                .is_some_and(|breakpoint| breakpoint.row == current_row),
+                                .is_some_and(|breakpoint| breakpoint.pointer == current_address),
                         )
                         .build()
                     {
@@ -599,11 +643,7 @@ impl Panel for DebuggerPanel {
                             self.breakpoints.remove(breakpoint_index);
                             self.breakpoints_window.strings.remove(breakpoint_index);
                         } else {
-                            let mut pointer = 0;
-
-                            for _ in 0..current_row {
-                                pointer += Cpu::decode(pointer, &emulator.memory_map).length as u16;
-                            }
+                            let pointer = self.get_address_at_line(emulator, current_row) as u16;
 
                             self.breakpoints.push(Breakpoint {
                                 row: current_row,
@@ -612,14 +652,14 @@ impl Panel for DebuggerPanel {
 
                             let breakpoint_string = format!(
                                 "Line: {}, Address: {:04x}, Instruction: {}",
-                                current_row,
-                                pointer,
-                                Cpu::decode(pointer, &emulator.memory_map).name
+                                current_row, pointer, instruction.name
                             );
 
                             self.breakpoints_window.strings.push(breakpoint_string);
                         }
                     }
+
+                    current_address += instruction.length as u16;
 
                     if let Some(color) = text_color {
                         color.pop();
@@ -627,7 +667,6 @@ impl Panel for DebuggerPanel {
                 });
 
                 // Scroll to desired location.
-
                 if let Some(row) = row_scroll {
                     ui.set_scroll_y((row - 7) as f32 * ui.current_font_size());
                 }

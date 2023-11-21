@@ -5,8 +5,6 @@ pub mod keyboard_map;
 pub mod memory;
 pub mod registers;
 
-use std::collections::HashMap;
-
 use imgui::{internal::DataTypeKind, Ui};
 
 use gameboy::Gameboy;
@@ -17,7 +15,7 @@ use self::{
 };
 
 pub trait Panel {
-    fn update(&mut self, emulator: &Gameboy, changes: &HashMap<u16, u8>);
+    fn update(&mut self, emulator: &Gameboy);
 
     fn render(&mut self, ui: &Ui, emulator: &mut Gameboy, width: f32, height: f32);
 
@@ -92,6 +90,17 @@ pub fn hex_input_u16<T: DataTypeKind>(ui: &imgui::Ui, name: &str, value: &mut T)
         .chars_uppercase(true)
         .display_format("%04x")
         .build()
+}
+
+pub fn format_in_place<T: Into<u32>>(buffer: &mut [u8], value: T, index: usize) {
+    let character_count = std::mem::size_of::<T>() * 2; // Get the nibble count.
+
+    let value = value.into();
+
+    for i in 0..character_count {
+        buffer[index + i] =
+            char::from_digit((value >> ((character_count - i - 1) * 4)) & 0xF, 16).unwrap() as u8;
+    }
 }
 
 pub struct GoToLinePopup {

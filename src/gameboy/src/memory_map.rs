@@ -15,7 +15,10 @@ Memory map of the gameboy(from pandocs: http://bgb.bircd.org/pandocs.htm):
 */
 use memoffset::offset_of;
 use std::{
-    cell::{UnsafeCell, RefCell}, collections::HashMap, marker::PhantomData, path::Path,
+    cell::{RefCell, UnsafeCell},
+    error::Error,
+    marker::PhantomData,
+    path::Path,
     ptr::copy_nonoverlapping,
 };
 use strum_macros::{AsRefStr, EnumIter};
@@ -106,7 +109,6 @@ impl<T: SyncMem> Clone for MemSyncer<T> {
     }
 }
 
-
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OamCorruption {
     Read,
@@ -178,10 +180,10 @@ pub enum Io {
 #[repr(C)]
 #[derive(Clone)]
 pub struct MemoryMap {
-    rom_banks: Vec<[u8; 0x4000]>,    // 16KB rom banks that is 'in the cartridge'.
-    vrams: Vec<[u8; 0x2000]>,        // 8KB video rams(VRAM)
+    rom_banks: Vec<[u8; 0x4000]>, // 16KB rom banks that is 'in the cartridge'.
+    vrams: Vec<[u8; 0x2000]>,     // 8KB video rams(VRAM)
     external_ram: Vec<[u8; 0x2000]>, // 8KB external ram that is'in the cartridge'.
-    wrams: Vec<[u8; 0x1000]>,        // 4KB work rams(WRAM)
+    wrams: Vec<[u8; 0x1000]>,     // 4KB work rams(WRAM)
     oam: RefCell<[u8; 0x100]>,    // Sprite Attribute Table(OAM)
     io_ports: [u8; 0x80],
     high_ram: [u8; 0x7F],
@@ -196,13 +198,13 @@ pub struct MemoryMap {
 
     pub boot_rom: Vec<u8>,
 
-    pub track_changes: bool,
-    pub changes: HashMap<u16, u8>,
-
     pub memory_watches: Vec<(u16, Option<u8>)>,
     pub triggered_watch: Option<usize>,
 
     pub on_dma_transfer: bool,
+
+    pub vram_changed: bool,
+    pub oam_changed: bool,
 }
 
 impl MemoryMap {
@@ -222,15 +224,16 @@ impl MemoryMap {
             mem_syncer: MemSyncer::default(),
             current_oam_row: None,
             oam_corruption_enabled: true,
-            
+
             boot_rom: Vec::new(),
 
             memory_watches: Vec::new(),
             triggered_watch: None,
 
-            track_changes: false,
-            changes: HashMap::new(),
             on_dma_transfer: false,
+
+            vram_changed: false,
+            oam_changed: false,
         }
     }
 
@@ -308,44 +311,21 @@ impl MemoryMap {
             // TODO: SAFETY
             copy_nonoverlapping(rom.as_ptr(), self.rom_banks.as_mut_ptr() as _, rom.len());
         }
-        
-        if self.track_changes {
-            self.changes.reserve(rom.len());
-
-            for i in self.boot_rom.len() as u16..0x8000 {
-                self.changes.insert(i, self.cpu_get(i));
-            }
-        }
     }
 
-    pub fn load_boot_rom<T: AsRef<Path>>(&mut self, path: T) {
-        self.boot_rom = std::fs::read(path).unwrap();
-
-        if self.track_changes {
-            self.changes.reserve(self.boot_rom.len());
-
-            for i in 0..self.boot_rom.len() {
-                self.changes.insert(i as u16, self.boot_rom[i]);
-            }
-        }
+    pub fn load_boot_rom<T: AsRef<Path>>(&mut self, path: T) -> Result<(), Box<dyn Error>> {
+        self.boot_rom = std::fs::read(path)?;
+        Ok(())
     }
 
     pub fn clear_boot_rom(&mut self) {
-        let boot_rom_length = self.boot_rom.len();
         self.boot_rom.clear();
-
-        if self.track_changes {
-            for i in 0..boot_rom_length as u16 {
-                self.changes.insert(i, self.cpu_get(i));
-            }
-        }
     }
 
     // General I/O. Can be used to get memory without any restriction.
     pub fn get(&self, address: u16) -> u8 {
-        
         let address = address as usize;
-        
+
         if address < self.boot_rom.len() {
             return self.boot_rom[address];
         } else if address < 0x4000 {
@@ -401,7 +381,6 @@ impl MemoryMap {
     }
 
     pub fn set(&mut self, address: u16, value: u8) {
-
         let address = address as usize;
 
         if address < 0x8000 {
@@ -444,7 +423,7 @@ impl MemoryMap {
     pub fn get_io(&self, address: Io) -> u8 {
         self.get(address as u16)
     }
-    
+
     pub fn set_io(&mut self, address: Io, value: u8) {
         self.set(address as u16, value)
     }
@@ -468,7 +447,6 @@ impl MemoryMap {
 
     // CPU I/O.
     pub fn cpu_set(&mut self, address: u16, mut value: u8) {
-        
         let sync_start = self.mem_syncer.sync_start();
 
         let lcd_disabled = (self.cpu_get_io(Io::LCDC) & 0x80) == 0;
@@ -480,12 +458,23 @@ impl MemoryMap {
         let can_set = if self.on_dma_transfer && (address < 0xFF80 || address == 0xFFFF) {
             // CPU can access only HRAM (memory at FF80-FFFE) during DMA transfer.
             false
-        } else if address >= 0x8000 && address < 0xA000 { // VRAM
+        } else if address >= 0x8000 && address < 0xA000 {
+            // VRAM
             // Ppu is in pixel transfer mode.
-            lcd_disabled || self.cpu_get_io(Io::STAT) & 0x3 != 0x3
-        } else if address >= 0xFE00 && address < 0xFEA0 { // OAM
+            let can_set = lcd_disabled || self.cpu_get_io(Io::STAT) & 0x3 != 0x3;
+            if can_set {
+                self.vram_changed = true;
+            }
+            can_set
+        } else if address >= 0xFE00 && address < 0xFEA0 {
+            // OAM
             // Ppu is in pixel transfer or OAM search mode.
-            lcd_disabled || self.cpu_get_io(Io::STAT) & 0x2 == 0
+
+            let can_set = lcd_disabled || self.cpu_get_io(Io::STAT) & 0x2 == 0;
+            if can_set {
+                self.oam_changed = true;
+            }
+            can_set
         } else if address == Io::DMA as _ {
             // DMA: Writing to this register launches a DMA transfer
             // It takes 640 cpu clock cycles for the DMA transfer to be complete.
@@ -502,11 +491,7 @@ impl MemoryMap {
 
         if can_set {
             self.set(address, value);
-            
-            if self.track_changes {
-                self.changes.insert(address as u16, value);
-            }
-        
+
             self.triggered_watch =
                 self.memory_watches
                     .iter()
@@ -524,7 +509,6 @@ impl MemoryMap {
     }
 
     pub fn cpu_get(&self, address: u16) -> u8 {
-        
         let sync_start = self.mem_syncer.sync_start();
 
         if self.oam_corruption_enabled {
@@ -538,12 +522,14 @@ impl MemoryMap {
             value = 0xFF;
         }
 
-        if address >= 0x8000 && address < 0xA000 { // VRAM
+        if address >= 0x8000 && address < 0xA000 {
+            // VRAM
             if self.cpu_get_io(Io::STAT) & 0x3 == 0x3 {
                 // Ppu is in pixel transfer mode.
                 value = 0xFF;
             }
-        } else if address >= 0xFE00 && address < 0xFEA0 { // OAM
+        } else if address >= 0xFE00 && address < 0xFEA0 {
+            // OAM
             if self.cpu_get_io(Io::STAT) & 0x2 != 0 {
                 // Ppu is in pixel transfer or OAM search mode.
                 value = 0xFF;
@@ -579,7 +565,7 @@ impl MemoryMap {
     pub fn disable_oam_corruption(&mut self) {
         self.oam_corruption_enabled = false;
     }
-    
+
     pub fn cpu_get_io(&self, address: Io) -> u8 {
         self.cpu_get(address as u16)
     }
@@ -645,40 +631,36 @@ impl MemoryMap {
     /*
         There is a bug in the gameboy hardware called OAM Corruption Bug.
         Any read or write to the OAM address space in OamSearch mode(Mode 2) will corrupt the OAM in a specific pattern.
-        Besides read/write of the memory, increment or decrement of a 16 bit integer will also corrupt the OAM 
+        Besides read/write of the memory, increment or decrement of a 16 bit integer will also corrupt the OAM
             if the value is in the OAM address space
         More info is available in the pandocs:
         // https://gbdev.io/pandocs/OAM_Corruption_Bug.html
     */
-    pub fn try_corrupt_oam(&self, value: u16, mut corruption: OamCorruption) {        
-    
+    pub fn try_corrupt_oam(&self, value: u16, mut corruption: OamCorruption) {
         if !(value >= 0xFE00 && value < 0xFF00) {
             // Not in OAM address spoace.
             return;
         }
 
         let set_oam_u16 = |address: u16, value: u16| {
-
             let address = address as usize - 0xFE00;
 
             self.oam.borrow_mut()[address] = (value & 0xFF) as u8;
-            self.oam.borrow_mut()[address + 1] = (value >> 8)as u8;
+            self.oam.borrow_mut()[address + 1] = (value >> 8) as u8;
         };
 
         if let Some(current_oam_row) = self.current_oam_row {
-
             if corruption == OamCorruption::IncDecRead {
-
                 if current_oam_row < 20 {
                     let start = 0xFE00 + (current_oam_row - 1) as u16 * 8;
-        
+
                     let a = self.get_u16(start - 8); // First word two rows before the currently accessed row.
-                    let b = self.get_u16(start);     // First word in the preceding row (the word being corrupted).
+                    let b = self.get_u16(start); // First word in the preceding row (the word being corrupted).
                     let c = self.get_u16(start + 8); // First word in the currently accessed row.
                     let d = self.get_u16(start + 4); // Third word in the preceding row.
-        
+
                     let result = (b & (a | c | d)) | (a & c & d);
-        
+
                     set_oam_u16(start, result);
 
                     for i in (0..8).step_by(2) {
@@ -687,7 +669,7 @@ impl MemoryMap {
                     }
                 }
 
-                // Regardless of whether the previous corruption occurred or not, 
+                // Regardless of whether the previous corruption occurred or not,
                 // a normal read corruption is then applied.
                 corruption = OamCorruption::Read;
             }
@@ -695,7 +677,7 @@ impl MemoryMap {
             if 0 < current_oam_row && current_oam_row < 20 {
                 let start = 0xFE00 + current_oam_row as u16 * 8;
 
-                let a = self.get_u16(start);     // Original value of that word
+                let a = self.get_u16(start); // Original value of that word
                 let b = self.get_u16(start - 8); // First word in the preceding row
                 let c = self.get_u16(start - 4); // Third word in the preceding row
 

@@ -1,4 +1,7 @@
-use crate::{memory_map::{MemoryMap, Io}, ppu::Ppu};
+use crate::{
+    memory_map::{Io, MemoryMap},
+    ppu::Ppu,
+};
 
 /*
     There are two pixel FIFOs.

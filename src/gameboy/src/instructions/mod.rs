@@ -36,6 +36,9 @@ fn undefined(_cpu: &mut Cpu, _memory_map: &mut MemoryMap) -> u8 {
 
 const UNDEFINED: Instruction = Instruction::new("UNDEFINED", 1, undefined);
 
+#[allow(dead_code)]
+pub const MAX_INSTRUCTION_NAME_LENGTH: usize = 11;
+
 pub const INSTRUCTIONS: [Instruction; 0x100] = [
     Instruction::new("NOP", 1, misc::nop),
     Instruction::new("LD BC,d16", 3, load::ld_bc_d16),

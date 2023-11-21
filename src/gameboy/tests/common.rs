@@ -1,26 +1,18 @@
-
-use std::{path::PathBuf, time::Duration};
 use gameboy::Gameboy;
 use image::EncodableLayout;
+use std::{path::PathBuf, time::Duration};
 
 fn run_test_rom(mut path: PathBuf) {
-
-    let mut emulator = Gameboy::after_boot(); 
+    let mut emulator = Gameboy::after_boot();
 
     emulator.load_cartidge(&path);
 
-    emulator.ppu.color_shades = [
-        0xFFFFFFFF,
-        0xFFAAAAAA,
-        0xFF555555,
-        0xFF000000,
-    ];
+    emulator.ppu.color_shades = [0xFFFFFFFF, 0xFFAAAAAA, 0xFF555555, 0xFF000000];
 
     let mut finished = false;
     let mut old_pc = 0;
 
     emulator.debug_cycle(Duration::from_secs(30), |emulator| {
-
         if old_pc == emulator.cpu.pc {
             finished = true;
         } else {
@@ -37,27 +29,31 @@ fn run_test_rom(mut path: PathBuf) {
     // Compare results.
     path.set_extension("png"); // Turn it to image path.
     let success_image = image::open(&path).unwrap().into_rgba8();
-    
+
     let screen_buffer = unsafe {
-        
         let length = emulator.ppu.screen_buffer.len() * std::mem::size_of::<u32>();
-        
-        std::slice::from_raw_parts(Box::into_raw(emulator.ppu.screen_buffer) as *const u8, length)
+
+        std::slice::from_raw_parts(
+            Box::into_raw(emulator.ppu.screen_buffer) as *const u8,
+            length,
+        )
     };
-    
-    assert!(success_image.as_bytes() == screen_buffer, "Test case {} failed.", &path.file_stem().unwrap().to_str().unwrap());
+
+    assert!(
+        success_image.as_bytes() == screen_buffer,
+        "Test case {} failed.",
+        &path.file_stem().unwrap().to_str().unwrap()
+    );
 }
 
 pub fn execute_tests(test_dir_path: &'static str) {
-
     let mut path = std::path::PathBuf::from(test_dir_path);
 
     if path.exists() {
         // Folder
         let directory = std::fs::read_dir(path).unwrap();
-        
-        for dir_entry in directory {
 
+        for dir_entry in directory {
             let path = dir_entry.unwrap().path();
 
             if let Some(extension) = path.extension() {
@@ -71,7 +67,6 @@ pub fn execute_tests(test_dir_path: &'static str) {
         path.set_extension("gb");
         run_test_rom(path);
     }
-
 }
 
 #[macro_export]

@@ -1,15 +1,16 @@
 #![feature(const_mut_refs)]
 
 pub mod cpu;
-mod instructions;
+pub mod instructions;
 mod mbc;
 pub mod memory_map;
 pub mod ppu;
 mod registers;
 
-use std::{path::Path, time::Duration};
+use std::{error::Error, path::Path, time::Duration};
 
 use cpu::Cpu;
+use instructions::{Instruction, INSTRUCTIONS, PREFIX_CB_INSTRUCTIONS};
 use memoffset::offset_of;
 use memory_map::MemoryMap;
 use ppu::Ppu;
@@ -86,27 +87,27 @@ pub struct Gameboy {
 }
 
 impl Gameboy {
+    /// Creates a new instance of Gameboy emulator that is ready to be booted.
+    /// # Arguments
+    /// * `boot_room_path` - Path to the valid boot room.
     #[allow(dead_code)]
-    pub fn new(boot_rom_path: impl AsRef<Path>) -> Self {
+    pub fn new(boot_rom_path: impl AsRef<Path>) -> Result<Self, Box<dyn Error>> {
         let mut emulator = Self {
             cpu: Cpu::new(),
             ppu: Ppu::new(),
 
             memory_map: MemoryMap::new(),
 
-            base_clock: 0,
-            remainder_cpu_cycles: 0,
-
-            dma_transfer_start: None,
-
-            joypad_keys: JoypadKeys::NONE,
+            ..Self::after_boot()
         };
 
-        emulator.memory_map.load_boot_rom(boot_rom_path);
+        emulator.memory_map.load_boot_rom(boot_rom_path)?;
 
-        emulator
+        Ok(emulator)
     }
 
+    /// Creates a new instance of Gameboy emulator that is finished booting.
+    /// This also means there is no checksums to be checked and can run practically any rom.
     #[allow(dead_code)]
     pub fn after_boot() -> Self {
         Self {
@@ -196,11 +197,14 @@ impl Gameboy {
         );
     }
 
+    /// Function for private implementation of the emulator cycle.
     /// Parameter base_clock_cycles represents how much base cycles this function will take.
     /// Function tries to do a complete emulation such as running Cpu, Ppu and counting timers such as DIV and TIMA.
-    fn cycle_impl<T: FnMut(&Self) -> bool>(&mut self, base_clock_cycles: u32, mut on_change: Option<T>) {
-        // Handle timers.
-
+    fn cycle_impl<T: FnMut(&Self) -> bool>(
+        &mut self,
+        base_clock_cycles: u32,
+        mut on_cpu_cycle: Option<T>,
+    ) {
         // Reset the triggered watch variable every cycle.
         self.memory_map.triggered_watch = None;
 
@@ -238,15 +242,6 @@ impl Gameboy {
 
                 self.cpu.cycle(&mut self.memory_map);
 
-                // if self.cpu.pc != 0xc571 && Cpu::decode(self.cpu.pc, &self.memory_map).name == "INC DE" {
-                //     self.memory_map.triggered_watch = Some(0);
-                // }
-
-                // if Cpu::decode(self.cpu.pc - 3, &self.memory_map).name == "LD SP,d16" 
-                //     && Cpu::decode(self.cpu.pc, &self.memory_map).name == "POP BC" {
-                //     self.memory_map.triggered_watch = Some(0);
-                // }
-
                 // Memory is triggered in user given condition. Stop execution.
                 if self.memory_map.triggered_watch.is_some() {
                     self.base_clock += 4;
@@ -267,7 +262,7 @@ impl Gameboy {
                     self.memory_map.clear_boot_rom();
                 }
 
-                if let Some(func) = &mut on_change {
+                if let Some(func) = &mut on_cpu_cycle {
                     if func(self) {
                         self.base_clock += 4;
                         break;
@@ -284,7 +279,7 @@ impl Gameboy {
                                        ^                           ^ Overworked cpu instruction in this emulator cycle.
                                        Remainder cpu instruction from last emulator cycle.
             Because that cpu instructions are wary in latency sometimes they overwork(run more than the base clock).
-            And then we store these overworked cycles and dont run the cpu until same amount of cycles passes.
+            And then we store these overworked cycles and don't run the cpu until same amount of cycles passes.
         */
         let total_cpu_cycles =
             self.cpu.clock_cycles - start_cpu_clock_cycles + self.remainder_cpu_cycles;
@@ -297,33 +292,45 @@ impl Gameboy {
         }
     }
 
-    pub fn debug_cycle<T: FnMut(&Self) -> bool>(&mut self, elapsed_time: Duration, on_change: T) {
+    /// Cycles the emulator with given elapsed time parameter.
+    /// # Arguments
+    /// * `elapsed_time` - Duration to execute the emulator. Note that this is in emulator time not in local machine time.
+    ///     For example if elapsed_time is 1 second function will effectively run 4 194 304 cpu cycles.
+    ///   
+    /// * `on_cpu_cycle` - A closure that will be called after running every cpu instruction.
+    pub fn debug_cycle<T: FnMut(&Self) -> bool>(
+        &mut self,
+        elapsed_time: Duration,
+        on_cpu_cycle: T,
+    ) {
         let base_clock_cycles = (CPU_CLOCK_RATE as f32 * elapsed_time.as_secs_f32()) as u32;
 
-        self.cycle_impl(base_clock_cycles, Some(on_change))
+        self.cycle_impl(base_clock_cycles, Some(on_cpu_cycle))
     }
 
+    /// Cycles the emulator with given elapsed time parameter.
+    /// # Arguments
+    /// * `elapsed_time` - Duration to execute the emulator. Note that this is in emulator time not in local machine time.
+    ///     For example if elapsed_time is 1 second function will effectively run 4 194 304 cpu cycles.
+    ///   
     pub fn cycle(&mut self, elapsed_time: Duration) {
         let base_clock_cycles = (CPU_CLOCK_RATE as f32 * elapsed_time.as_secs_f32()) as u32;
 
         self.cycle_impl::<fn(&Self) -> bool>(base_clock_cycles, None);
     }
 
+    /// Cycles the emulator in the smallest possible step.
+    /// Function is guaranteed to run exactly 1 cpu instruction.
     pub fn cycle_once(&mut self) {
-        // Call the implementation function with the base clock's step cycle count.
-        // This way emulator exactly does the smallest unit of emulation.
-
-        // Clear the remainder cpu cycles because this function should always call cpu.cycle().
-        // self.remainder_cpu_cycles = 0; // TODO: better implementation?
         // Rust requires a type to be passed on. So we pass a dummy function pointer.
-        self.cycle_impl::<fn(&Self) -> bool>(4, None)
+        self.cycle_impl::<fn(&Self) -> bool>(self.remainder_cpu_cycles + 4, None)
     }
 
     pub fn update_joypad_keys(&mut self, keys: JoypadKeys) {
         self.joypad_keys = keys;
     }
 
-    pub fn update_joypad(&mut self) {
+    fn update_joypad(&mut self) {
         let joyp = self.memory_map.cpu_get_io(Io::JOYP);
 
         let keys = if joyp & 0x30 == 0x30 {
@@ -346,6 +353,19 @@ impl Gameboy {
         if keys != 0xF {
             self.memory_map
                 .cpu_set_io(Io::IF, self.memory_map.cpu_get_io(Io::IF) | 0x10);
+        }
+    }
+
+    /// A instruction fetch and decode without any side effects.
+    /// # Arguments
+    /// * `address` - Starting address of the instruction
+    pub fn decode_instr(&self, address: u16) -> Instruction {
+        let opcode = self.memory_map.get(address);
+
+        if opcode == 0xCB {
+            PREFIX_CB_INSTRUCTIONS[self.memory_map.get(address + 1) as usize]
+        } else {
+            INSTRUCTIONS[opcode as usize]
         }
     }
 }

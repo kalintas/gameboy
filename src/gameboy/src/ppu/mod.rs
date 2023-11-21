@@ -1,11 +1,13 @@
-
-mod pixel_fifo;
 mod pixel_fetcher;
+mod pixel_fifo;
 
 use arrayvec::ArrayVec;
 use strum_macros::AsRefStr;
 
-use self::{pixel_fifo::PixelFifo, pixel_fetcher::{PixelFetcher, PixelFetcherMode}};
+use self::{
+    pixel_fetcher::{PixelFetcher, PixelFetcherMode},
+    pixel_fifo::PixelFifo,
+};
 
 use super::memory_map::{Io, MemoryMap};
 
@@ -61,7 +63,7 @@ pub struct Ppu {
     scroll_x: u8,
 
     // The window keeps an internal line counter that’s functionally similar to LY, and increments alongside it.
-    window_line_counter: u16, 
+    window_line_counter: u16,
 
     fifo: PixelFifo,
     oam_fifo: PixelFifo,
@@ -95,8 +97,12 @@ impl Ppu {
             found_objects: ArrayVec::new(),
 
             screen_buffer: Box::new([0u32; SCREEN_WIDTH * SCREEN_HEIGHT]),
-            color_shades: [0xff0fbc9b, 0xff0fac8b, 0xff306230, 0xff0f380f]
+            color_shades: [0xff0fbc9b, 0xff0fac8b, 0xff306230, 0xff0f380f],
         }
+    }
+
+    pub fn after_boot() -> Self {
+        todo!()
     }
 
     fn oam_search(&mut self, memory_map: &mut MemoryMap, dots: u32) {
@@ -134,9 +140,9 @@ impl Ppu {
             self.found_objects
                 .sort_by(|lhs, rhs| rhs.pos_x.cmp(&lhs.pos_x));
         }
-        
+
         self.clock_cycles += dots;
-        
+
         self.update_mode(memory_map);
     }
 
@@ -155,8 +161,8 @@ impl Ppu {
 
         let lcdc = memory_map.get_io(Io::LCDC);
 
-        let bg_w_enable = lcdc & 0x1 != 0;                   // LCDC.0 — BG and Window enable/priority
-        let obj_enable = lcdc & 0x2 != 0;                    // LCDC.1 — OBJ enable
+        let bg_w_enable = lcdc & 0x1 != 0; // LCDC.0 — BG and Window enable/priority
+        let obj_enable = lcdc & 0x2 != 0; // LCDC.1 — OBJ enable
         let window_enable = bg_w_enable && lcdc & 0x20 != 0; // LCDC.5 — Window enable
 
         let wx = memory_map.get_io(Io::WX);
@@ -185,14 +191,16 @@ impl Ppu {
             // Pixel fetcher cycle takes 2 dots most of the time
             // but there is a condition that it can take 1 dot.
             if fetcher_cycles < dots {
-                fetcher_cycles +=
-                    self.pixel_fetcher
-                        .cycle(memory_map, &mut self.fifo, &mut self.oam_fifo, self.window_line_counter);
+                fetcher_cycles += self.pixel_fetcher.cycle(
+                    memory_map,
+                    &mut self.fifo,
+                    &mut self.oam_fifo,
+                    self.window_line_counter,
+                );
             }
 
             // Check the last element since the found_objects is sorted in decreasing order.
             if let Some(object) = self.found_objects.last() {
-
                 if self.pos_x == object.pos_x as usize {
                     // Wait until the pixel fetcher finishes tile fetching.
                     if self.pixel_fetcher.mode != PixelFetcherMode::GetTile {
@@ -227,7 +235,9 @@ impl Ppu {
                         self.oam_fifo.pop(memory_map, &self.color_shades);
 
                     if obj_enable {
-                        if !bg_w_enable || (object_color_index != 0 && (priority == 0 || color_index == 0)) {
+                        if !bg_w_enable
+                            || (object_color_index != 0 && (priority == 0 || color_index == 0))
+                        {
                             color = object_color;
                         }
                     }
@@ -237,8 +247,8 @@ impl Ppu {
 
                 /*
                     From pandocs:
-                    When re-enabling the LCD, the PPU will immediately start drawing again, 
-                        but the screen will stay blank during the first frame. 
+                    When re-enabling the LCD, the PPU will immediately start drawing again,
+                        but the screen will stay blank during the first frame.
                 */
                 if !self.is_first_frame && self.pos_x >= 8 {
                     self.screen_buffer[(self.pos_x - 8) + ly as usize * SCREEN_WIDTH] = color;
@@ -287,15 +297,10 @@ impl Ppu {
             }
         }
 
-        memory_map.current_oam_row = if line_remainder == 0 {
-            Some(1)
-        } else {
-            None
-        };
+        memory_map.current_oam_row = if line_remainder == 0 { Some(1) } else { None };
 
         let mode = match self.mode {
             Mode::OamSearch => {
-
                 memory_map.current_oam_row = Some(line_remainder as u16 / 4 + 1);
 
                 if line_remainder >= 80 {
@@ -304,11 +309,10 @@ impl Ppu {
                     self.fifo = PixelFifo::new();
                     self.oam_fifo = PixelFifo::new();
                     self.pixel_fetcher = PixelFetcher::new();
-                    
+
                     // Push a background tile that will never be on screen.
                     // This is done for rendering objects with x < 8.
                     self.fifo.push(0, PixelFifo::BACKGROUND_PIXEL, 0);
-
 
                     Mode::PixelTransfer
                 } else {
@@ -318,7 +322,6 @@ impl Ppu {
             Mode::PixelTransfer => {
                 // TODO:
                 if self.pos_x >= SCREEN_WIDTH + 8 {
-
                     if self.pixel_fetcher.is_window {
                         // Increment the window internal line counter.
                         self.window_line_counter += 1;
@@ -378,7 +381,6 @@ impl Ppu {
     }
 
     pub fn cycle(&mut self, memory_map: &mut MemoryMap, dots: u32) {
-
         let lcdc = memory_map.get_io(Io::LCDC);
 
         if lcdc & 0x80 == 0 {
@@ -402,14 +404,14 @@ impl Ppu {
         }
 
         self.enabled = true;
-        
+
         assert_eq!(dots, 4);
         match self.mode {
             Mode::OamSearch => self.oam_search(memory_map, dots),
             Mode::PixelTransfer => self.pixel_transfer(memory_map, dots),
             Mode::HBlank => self.hblank(memory_map, dots),
             Mode::VBlank => self.vblank(memory_map, dots),
-        };        
+        };
     }
 
     #[allow(dead_code)]

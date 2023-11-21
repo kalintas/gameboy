@@ -1,6 +1,6 @@
 
 
-function instructionFile(instructions, prefixCBInstructions) {
+function instructionFile(instructions, prefixCBInstructions, maxInstructionNameLength) {
 
 return`
 mod misc;
@@ -9,8 +9,8 @@ mod load;
 mod arithmetic;
 mod bit;
 
-use gameboy::Cpu;
-use gameboy::memory_map::MemoryMap;
+use crate::Cpu;
+use crate::memory_map::MemoryMap;
 
 #[derive(Clone, Copy)]
 pub struct Instruction {
@@ -37,6 +37,9 @@ fn undefined(_cpu: &mut Cpu, _memory_map: &mut MemoryMap) -> u8 {
 
 const UNDEFINED: Instruction = Instruction::new("UNDEFINED", 1, undefined);
 
+#[allow(dead_code)]
+pub const MAX_INSTRUCTION_NAME_LENGTH: usize = ${maxInstructionNameLength};
+
 pub const INSTRUCTIONS: [Instruction; 0x100] = [
 ${instructions}
 ];
@@ -48,8 +51,8 @@ ${prefixCBInstructions}
 
 function instructionFunctionFile(instructionFunctions) {
     return`#![allow(dead_code, unused_variables)]
-use gameboy::memory_map::MemoryMap;
-use gameboy::Cpu;
+use crate::memory_map::MemoryMap;
+use crate::Cpu;
 ${instructionFunctions}`
 }
 

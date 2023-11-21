@@ -69,21 +69,11 @@ impl Cpu {
         memory_map.mem_syncer.close_sync();
     }
 
-    pub fn fetch(pc: u16, memory_map: &MemoryMap) -> u8 {
+    fn fetch(pc: u16, memory_map: &MemoryMap) -> u8 {
         memory_map.cpu_get(pc)
     }
 
-    pub fn decode(pc: u16, memory_map: &MemoryMap) -> Instruction {
-        let opcode = Self::fetch(pc, memory_map);
-
-        if opcode == 0xCB {
-            PREFIX_CB_INSTRUCTIONS[Self::fetch(pc + 1, memory_map) as usize]
-        } else {
-            INSTRUCTIONS[opcode as usize]
-        }
-    }
-
-    pub fn execute(&mut self, instruction: Instruction, memory_map: &mut MemoryMap) {
+    fn execute(&mut self, instruction: Instruction, memory_map: &mut MemoryMap) {
         self.pc += instruction.length as u16;
 
         let instruction_cycles = (instruction.function)(self, memory_map) as u32;
@@ -284,7 +274,7 @@ impl Cpu {
 
         /*
             Flags affected:
-            Z - Set if reselt is zero.
+            Z - Set if result is zero.
             N - Set.
             H - Set if no borrow from bit 4.
             C - Not affected
@@ -341,7 +331,7 @@ impl Cpu {
     }
 
     pub fn shift_right_arithmetic(&mut self, val: u8) -> u8 {
-        let result = (val >> 1) | (val & 0x80); // MSB doesnt change.
+        let result = (val >> 1) | (val & 0x80); // MSB doesn't change.
         self.registers
             .set_flags((result == 0) as u8, 0, 0, val & 0x1);
 
@@ -384,14 +374,13 @@ impl Cpu {
     }
 
     pub fn pop(&mut self, memory_map: &mut MemoryMap) -> u16 {
-
         memory_map.disable_oam_corruption();
         memory_map.try_corrupt_oam(self.sp, OamCorruption::IncDecRead);
         let lsb = memory_map.cpu_get(self.sp) as u16; // Get the least significant byte
         memory_map.try_corrupt_oam(self.sp + 1, OamCorruption::Read);
         let msb = memory_map.cpu_get(self.sp + 1) as u16; // Get the most significant byte
         memory_map.enable_oam_corruption();
-        
+
         self.sp += 2;
 
         lsb | (msb << 8)

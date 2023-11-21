@@ -1,4 +1,3 @@
-
 use super::*;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -40,7 +39,7 @@ impl PixelFetcher {
         memory_map: &MemoryMap,
         fifo: &mut PixelFifo,
         oam_fifo: &mut PixelFifo,
-        window_internal_line_counter: u16
+        window_internal_line_counter: u16,
     ) -> u32 {
         let lcdc = memory_map.get_io(Io::LCDC);
         let ly = memory_map.get_io(Io::LY) as u16;
@@ -64,7 +63,6 @@ impl PixelFetcher {
                 let tile_map_value = if let Some(object) = self.fetching_object {
                     object.tile_index
                 } else {
-                    
                     if self.is_window {
                         memory_map.ppu_get_vram(
                             w_tile_map_start
@@ -113,11 +111,7 @@ impl PixelFetcher {
                         tile_map_value = ((tile_map_value as u8) as i8) as i32;
                     }
 
-                    let pos_y = if self.is_window {
-                        ly
-                    } else {
-                        ly + scy  
-                    };
+                    let pos_y = if self.is_window { ly } else { ly + scy };
 
                     tile_y = ((pos_y % 256) % 8) as i32;
                     tile_data_start = bg_w_tile_data_start;

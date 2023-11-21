@@ -1,6 +1,5 @@
-
-mod renderer;
 mod panels;
+mod renderer;
 
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -20,6 +19,7 @@ use sdl2::keyboard::Scancode;
 pub struct GameboyRenderer {
     running: bool,
     current_rom_path: PathBuf,
+    current_boot_rom_path: Option<PathBuf>,
 
     panels: Panels,
 
@@ -33,7 +33,8 @@ impl GameboyRenderer {
 
         Self {
             running: true,
-            current_rom_path: PathBuf::from_str("./roms/test/acid/dmg_acid2.gb").unwrap(),
+            current_rom_path: PathBuf::from_str("./roms/zelda.gb").unwrap(),
+            current_boot_rom_path: None,
 
             panels,
             renderer,
@@ -44,13 +45,11 @@ impl GameboyRenderer {
         let emulator = &mut Gameboy::after_boot();
 
         emulator.load_cartidge(&self.current_rom_path);
-        
+
         self.run_with(emulator);
     }
 
     pub fn run_with(&mut self, emulator: &mut Gameboy) {
-        // let emulator = &mut emulator::Emulator::new("./roms/boot/dmg_boot.gb");
-
         self.panels.debugger.pause(emulator);
 
         let framebuffer = Framebuffer::new();
@@ -72,6 +71,9 @@ impl GameboyRenderer {
                     .keyboard_map
                     .update_keys(keyboard_state.pressed_scancodes().collect()),
             );
+
+            emulator.memory_map.vram_changed = false;
+            emulator.memory_map.oam_changed = false;
 
             self.panels.debugger.cycle(emulator);
 
@@ -97,9 +99,7 @@ impl GameboyRenderer {
                 seconds_timer = now;
             }
 
-            panels::call_all_panels!(self.panels, update, emulator, &emulator.memory_map.changes);
-
-            emulator.memory_map.changes.clear();
+            panels::call_all_panels!(self.panels, update, emulator);
 
             self.renderer.clear_screen();
             framebuffer.update_buffer(
@@ -152,8 +152,14 @@ impl GameboyRenderer {
                         }
 
                         if ui.menu_item("Reload Cartidage") {
-                            *emulator = Gameboy::after_boot();
+                            if let Some(boot_rom_path) = &self.current_boot_rom_path {
+                                *emulator = Gameboy::new(boot_rom_path).unwrap();
+                            } else {
+                                *emulator = Gameboy::after_boot();
+                            }
+
                             emulator.load_cartidge(&self.current_rom_path);
+
                             reset_emulator = true;
                         }
 
@@ -175,6 +181,33 @@ impl GameboyRenderer {
                         small_panel(&mut self.panels.bg_map);
                     });
 
+                    ui.menu("Boot Rom", || {
+                        if ui
+                            .menu_item_config("No Boot Rom")
+                            .selected(self.current_boot_rom_path.is_none())
+                            .build()
+                        {
+                            self.current_boot_rom_path = None;
+                        }
+
+                        if let Some(boot_rom_path) = &self.current_boot_rom_path {
+                            ui.menu_item_config(
+                                boot_rom_path.file_name().unwrap().to_str().unwrap(),
+                            )
+                            .selected(true)
+                            .build();
+                        }
+
+                        if ui.menu_item("Load Boot Rom") {
+                            let file = FileDialog::set_directory(FileDialog::new(), "./roms/boot")
+                                .pick_file();
+
+                            if let Some(file_path) = file {
+                                self.current_boot_rom_path = Some(file_path);
+                            }
+                        }
+                    });
+
                     ui.menu("Debug", || {
                         if ui.menu_item("Continue                F5") {
                             self.panels.debugger.continue_execution();
@@ -191,9 +224,37 @@ impl GameboyRenderer {
                         if ui.menu_item("Clear All Breakpoints") {
                             self.panels.debugger.clear_breakpoints();
                         }
+                    });
 
+                    ui.menu("Tools", || {
                         if ui.menu_item("Dump disassembly") {
-                            self.panels.debugger.dump_strings();
+                            let path = FileDialog::new()
+                                .set_file_name("disassembly_dump.txt")
+                                .save_file();
+                            if let Some(path) = path {
+                                if let Err(error) =
+                                    self.panels.debugger.dump_to_file(path, &emulator)
+                                {
+                                    ui.modal_popup("Cannot dump disassembly", || {
+                                        ui.text(format!("Error: {}", error));
+                                    });
+                                }
+                            }
+                        }
+
+                        if ui.menu_item("Dump memory") {
+                            let path = FileDialog::new()
+                                .set_file_name("memory_dump.txt")
+                                .save_file();
+                            if let Some(path) = path {
+                                if let Err(error) = self.panels.memory.dump_to_file(path, &emulator)
+                                {
+                                    println!("{}", error);
+                                    ui.modal_popup("Cannot dump memory", || {
+                                        ui.text(format!("Error: {}", error));
+                                    });
+                                }
+                            }
                         }
                     });
 
@@ -259,8 +320,6 @@ impl GameboyRenderer {
             let elapsed_time = now - timer;
             emulator.cycle(elapsed_time);
             timer = now;
-
-            emulator.memory_map.changes.clear();
 
             self.renderer.clear_screen();
 
