@@ -1,5 +1,3 @@
-#![feature(const_mut_refs)]
-
 pub mod cpu;
 pub mod instructions;
 mod mbc;
